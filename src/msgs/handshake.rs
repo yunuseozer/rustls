@@ -52,7 +52,8 @@ macro_rules! declare_u16_vec(
 declare_u16_vec!(VecU16OfPayloadU8, PayloadU8);
 declare_u16_vec!(VecU16OfPayloadU16, PayloadU16);
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct Random([u8; 32]);
 
 static HELLO_RETRY_REQUEST_RANDOM: Random = Random([
@@ -96,6 +97,7 @@ pub struct SessionID {
     data: [u8; 32],
 }
 
+#[cfg(feature = "logging")]
 impl fmt::Debug for SessionID {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut t = f.debug_tuple("SessionID");
@@ -176,7 +178,7 @@ impl SessionID {
     }
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct UnknownExtension {
     pub typ: ExtensionType,
     pub payload: Payload,
@@ -215,8 +217,24 @@ pub trait SupportedGroups {
 }
 
 impl SupportedGroups for NamedGroups {
+    #[cfg(all(feature = "x25519", feature = "ecdh"))]
     fn supported() -> NamedGroups {
         vec![ NamedGroup::X25519, NamedGroup::secp384r1, NamedGroup::secp256r1 ]
+    }
+
+    #[cfg(all(not(feature = "x25519"), feature = "ecdh"))]
+    fn supported() -> NamedGroups {
+        vec![ NamedGroup::secp384r1, NamedGroup::secp256r1 ]
+    }
+
+    #[cfg(all(feature = "x25519", not(feature = "ecdh")))]
+    fn supported() -> NamedGroups {
+        vec![ NamedGroup::X25519 ]
+    }
+
+    #[cfg(all(not(feature = "x25519"), not(feature = "ecdh")))]
+    fn supported() -> NamedGroups {
+        vec![]
     }
 }
 
@@ -237,6 +255,7 @@ impl DecomposedSignatureScheme for SignatureScheme {
                 SignatureScheme::RSA_PSS_SHA256 |
                 SignatureScheme::RSA_PSS_SHA384 |
                 SignatureScheme::RSA_PSS_SHA512 => SignatureAlgorithm::RSA,
+            #[cfg(feature = "ecdsa")]
             SignatureScheme::ECDSA_NISTP256_SHA256 |
                 SignatureScheme::ECDSA_NISTP384_SHA384 |
                 SignatureScheme::ECDSA_NISTP521_SHA512 => SignatureAlgorithm::ECDSA,
@@ -245,7 +264,9 @@ impl DecomposedSignatureScheme for SignatureScheme {
     }
 
     fn make(alg: SignatureAlgorithm, hash: HashAlgorithm) -> SignatureScheme {
-        use msgs::enums::SignatureAlgorithm::{RSA, ECDSA};
+        use msgs::enums::SignatureAlgorithm::RSA;
+        #[cfg(feature = "ecdsa")]
+        use msgs::enums::SignatureAlgorithm::ECDSA;
         use msgs::enums::HashAlgorithm::{SHA1, SHA256, SHA384, SHA512};
 
         match (alg, hash) {
@@ -253,8 +274,11 @@ impl DecomposedSignatureScheme for SignatureScheme {
             (RSA, SHA256) => SignatureScheme::RSA_PKCS1_SHA256,
             (RSA, SHA384) => SignatureScheme::RSA_PKCS1_SHA384,
             (RSA, SHA512) => SignatureScheme::RSA_PKCS1_SHA512,
+            #[cfg(feature = "ecdsa")]
             (ECDSA, SHA256) => SignatureScheme::ECDSA_NISTP256_SHA256,
+            #[cfg(feature = "ecdsa")]
             (ECDSA, SHA384) => SignatureScheme::ECDSA_NISTP384_SHA384,
+            #[cfg(feature = "ecdsa")]
             (ECDSA, SHA512) => SignatureScheme::ECDSA_NISTP521_SHA512,
             (_, _) => unreachable!(),
         }
@@ -271,7 +295,9 @@ impl SupportedMandatedSignatureSchemes for SupportedSignatureSchemes {
     fn supported_verify() -> SupportedSignatureSchemes {
         vec![
             /* FIXME: ECDSA-P521-SHA512 */
+            #[cfg(feature = "ecdsa")]
             SignatureScheme::ECDSA_NISTP384_SHA384,
+            #[cfg(feature = "ecdsa")]
             SignatureScheme::ECDSA_NISTP256_SHA256,
 
             SignatureScheme::RSA_PSS_SHA512,
@@ -288,7 +314,9 @@ impl SupportedMandatedSignatureSchemes for SupportedSignatureSchemes {
 
     fn supported_sign_tls13() -> SupportedSignatureSchemes {
         vec![
+            #[cfg(feature = "ecdsa")]
             SignatureScheme::ECDSA_NISTP384_SHA384,
+            #[cfg(feature = "ecdsa")]
             SignatureScheme::ECDSA_NISTP256_SHA256,
 
             SignatureScheme::RSA_PSS_SHA512,
@@ -298,7 +326,8 @@ impl SupportedMandatedSignatureSchemes for SupportedSignatureSchemes {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub enum ServerNamePayload {
     HostName(webpki::DNSName),
     Unknown(Payload),
@@ -327,7 +356,8 @@ impl ServerNamePayload {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct ServerName {
     pub typ: ServerNameType,
     pub payload: ServerNamePayload,
@@ -411,7 +441,7 @@ impl ConvertProtocolNameList for ProtocolNameList {
 }
 
 // --- TLS 1.3 Key shares ---
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct KeyShareEntry {
     pub group: NamedGroup,
     pub payload: PayloadU16,
@@ -444,7 +474,7 @@ impl Codec for KeyShareEntry {
 }
 
 // --- TLS 1.3 PresharedKey offers ---
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct PresharedKeyIdentity {
     pub identity: PayloadU16,
     pub obfuscated_ticket_age: u32,
@@ -477,7 +507,7 @@ declare_u16_vec!(PresharedKeyIdentities, PresharedKeyIdentity);
 pub type PresharedKeyBinder = PayloadU8;
 pub type PresharedKeyBinders = VecU16OfPayloadU8;
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct PresharedKeyOffer {
     pub identities: PresharedKeyIdentities,
     pub binders: PresharedKeyBinders,
@@ -510,7 +540,7 @@ impl Codec for PresharedKeyOffer {
 // --- RFC6066 certificate status request ---
 type ResponderIDs = VecU16OfPayloadU16;
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct OCSPCertificateStatusRequest {
     pub responder_ids: ResponderIDs,
     pub extensions: PayloadU16,
@@ -531,7 +561,7 @@ impl Codec for OCSPCertificateStatusRequest {
     }
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub enum CertificateStatusRequest {
     OCSP(OCSPCertificateStatusRequest),
     Unknown((CertificateStatusType, Payload))
@@ -585,7 +615,7 @@ declare_u8_vec!(PSKKeyExchangeModes, PSKKeyExchangeMode);
 declare_u16_vec!(KeyShareEntries, KeyShareEntry);
 declare_u8_vec!(ProtocolVersions, ProtocolVersion);
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub enum ClientExtension {
     ECPointFormats(ECPointFormatList),
     NamedGroups(NamedGroups),
@@ -725,7 +755,118 @@ impl ClientExtension {
     }
 }
 
-#[derive(Debug)]
+#[test]
+fn can_roundtrip_unknown_client_ext() {
+    let bytes = [0x12u8, 0x34u8, 0, 3, 1, 2, 3];
+    let mut rd = Reader::init(&bytes);
+    let ext = ClientExtension::read(&mut rd)
+        .unwrap();
+
+    println!("{:?}", ext);
+    assert_eq!(ext.get_type(), ExtensionType::Unknown(0x1234));
+    assert_eq!(bytes.to_vec(), ext.get_encoding());
+}
+
+#[test]
+fn can_roundtrip_single_sni() {
+    let bytes = [
+        0, 0,
+        0, 7,
+        0, 5,
+          0, 0, 2, 0x6c, 0x6f
+    ];
+    let mut rd = Reader::init(&bytes);
+    let ext = ClientExtension::read(&mut rd)
+        .unwrap();
+    println!("{:?}", ext);
+
+    assert_eq!(ext.get_type(), ExtensionType::ServerName);
+    assert_eq!(bytes.to_vec(), ext.get_encoding());
+}
+
+#[test]
+fn can_roundtrip_multiname_sni() {
+    let bytes = [
+        0, 0,
+        0, 12,
+        0, 10,
+          0, 0, 2, 0x68, 0x69,
+          0, 0, 2, 0x6c, 0x6f
+    ];
+    let mut rd = Reader::init(&bytes);
+    let ext = ClientExtension::read(&mut rd)
+        .unwrap();
+    println!("{:?}", ext);
+
+    assert_eq!(ext.get_type(), ExtensionType::ServerName);
+    assert_eq!(bytes.to_vec(), ext.get_encoding());
+    match ext {
+        ClientExtension::ServerName(req) => {
+            assert_eq!(2, req.len());
+
+            let dns_name_str: &str = req.get_hostname().unwrap().into();
+            assert_eq!(dns_name_str, "hi");
+
+            assert_eq!(req[0].typ, ServerNameType::HostName);
+            assert_eq!(req[1].typ, ServerNameType::HostName);
+        }
+        _ => unreachable!()
+    }
+}
+
+#[test]
+fn can_roundtrip_multi_proto() {
+    let bytes = [
+        0, 16,
+        0, 8,
+        0, 6,
+          2, 0x68, 0x69,
+          2, 0x6c, 0x6f
+    ];
+    let mut rd = Reader::init(&bytes);
+    let ext = ClientExtension::read(&mut rd)
+        .unwrap();
+    println!("{:?}", ext);
+
+    assert_eq!(ext.get_type(), ExtensionType::ALProtocolNegotiation);
+    assert_eq!(bytes.to_vec(), ext.get_encoding());
+    match ext {
+        ClientExtension::Protocols(prot) => {
+            assert_eq!(2, prot.len());
+            assert_eq!(vec!["hi".to_string(), "lo".to_string()],
+                       prot.to_strings());
+            assert_eq!(prot.as_single_string(), None);
+        }
+        _ => unreachable!()
+    }
+}
+
+#[test]
+fn can_roundtrip_single_proto() {
+    let bytes = [
+        0, 16,
+        0, 5,
+        0, 3,
+          2, 0x68, 0x69,
+    ];
+    let mut rd = Reader::init(&bytes);
+    let ext = ClientExtension::read(&mut rd)
+        .unwrap();
+    println!("{:?}", ext);
+
+    assert_eq!(ext.get_type(), ExtensionType::ALProtocolNegotiation);
+    assert_eq!(bytes.to_vec(), ext.get_encoding());
+    match ext {
+        ClientExtension::Protocols(prot) => {
+            assert_eq!(1, prot.len());
+            assert_eq!(vec!["hi".to_string()], prot.to_strings());
+            assert_eq!(prot.as_single_string(), Some("hi"));
+        }
+        _ => unreachable!()
+    }
+}
+
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub enum ServerExtension {
     ECPointFormats(ECPointFormatList),
     ServerNameAck,
@@ -838,7 +979,7 @@ impl ServerExtension {
     }
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct ClientHelloPayload {
     pub client_version: ProtocolVersion,
     pub random: Random,
@@ -1026,7 +1167,7 @@ impl ClientHelloPayload {
     }
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub enum HelloRetryExtension {
     KeyShare(NamedGroup),
     Cookie(PayloadU16),
@@ -1081,7 +1222,7 @@ impl Codec for HelloRetryExtension {
     }
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct HelloRetryRequest {
     pub legacy_version: ProtocolVersion,
     pub session_id: SessionID,
@@ -1174,7 +1315,7 @@ impl HelloRetryRequest {
     }
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct ServerHelloPayload {
     pub legacy_version: ProtocolVersion,
     pub random: Random,
@@ -1291,7 +1432,7 @@ impl Codec for CertificatePayload {
 // That's annoying. It means the parsing is not
 // context-free any more.
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub enum CertificateExtension {
     CertificateStatus(CertificateStatus),
     SignedCertificateTimestamp(SCTList),
@@ -1364,7 +1505,7 @@ impl Codec for CertificateExtension {
 
 declare_u16_vec!(CertificateExtensions, CertificateExtension);
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct CertificateEntry {
     pub cert: key::Certificate,
     pub exts: CertificateExtensions,
@@ -1431,7 +1572,7 @@ impl CertificateEntry {
     }
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct CertificatePayloadTLS13 {
     pub context: PayloadU8,
     pub list: Vec<CertificateEntry>,
@@ -1511,7 +1652,7 @@ impl CertificatePayloadTLS13 {
     }
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub enum KeyExchangeAlgorithm {
     BulkOnly,
     DH,
@@ -1524,7 +1665,7 @@ pub enum KeyExchangeAlgorithm {
 // We don't support arbitrary curves.  It's a terrible
 // idea and unnecessary attack surface.  Please,
 // get a grip.
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct ECParameters {
     pub curve_type: ECCurveType,
     pub named_group: NamedGroup,
@@ -1552,7 +1693,8 @@ impl Codec for ECParameters {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct DigitallySignedStruct {
     pub scheme: SignatureScheme,
     pub sig: PayloadU16,
@@ -1584,7 +1726,7 @@ impl Codec for DigitallySignedStruct {
     }
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct ClientECDHParams {
     pub public: PayloadU8,
 }
@@ -1600,7 +1742,7 @@ impl Codec for ClientECDHParams {
     }
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct ServerECDHParams {
     pub curve_params: ECParameters,
     pub public: PayloadU8,
@@ -1635,7 +1777,7 @@ impl Codec for ServerECDHParams {
     }
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct ECDHEServerKeyExchange {
     pub params: ServerECDHParams,
     pub dss: DigitallySignedStruct,
@@ -1658,7 +1800,7 @@ impl Codec for ECDHEServerKeyExchange {
     }
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub enum ServerKeyExchangePayload {
     ECDHE(ECDHEServerKeyExchange),
     Unknown(Payload),
@@ -1764,7 +1906,7 @@ declare_u8_vec!(ClientCertificateTypes, ClientCertificateType);
 pub type DistinguishedName = PayloadU16;
 pub type DistinguishedNames = VecU16OfPayloadU16;
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct CertificateRequestPayload {
     pub certtypes: ClientCertificateTypes,
     pub sigschemes: SupportedSignatureSchemes,
@@ -1791,7 +1933,7 @@ impl Codec for CertificateRequestPayload {
     }
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub enum CertReqExtension {
     SignatureAlgorithms(SupportedSignatureSchemes),
     AuthorityNames(DistinguishedNames),
@@ -1844,7 +1986,7 @@ impl Codec for CertReqExtension {
 
 declare_u16_vec!(CertReqExtensions, CertReqExtension);
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct CertificateRequestPayloadTLS13 {
     pub context: PayloadU8,
     pub extensions: CertReqExtensions,
@@ -1890,7 +2032,7 @@ impl CertificateRequestPayloadTLS13 {
 }
 
 // -- NewSessionTicket --
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct NewSessionTicketPayload {
     pub lifetime_hint: u32,
     pub ticket: PayloadU16,
@@ -1923,7 +2065,7 @@ impl Codec for NewSessionTicketPayload {
 }
 
 // -- NewSessionTicket electric boogaloo --
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub enum NewSessionTicketExtension {
     Unknown(UnknownExtension),
 }
@@ -1964,7 +2106,7 @@ impl Codec for NewSessionTicketExtension {
 
 declare_u16_vec!(NewSessionTicketExtensions, NewSessionTicketExtension);
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct NewSessionTicketPayloadTLS13 {
     pub lifetime: u32,
     pub age_add: u32,
@@ -2017,7 +2159,7 @@ impl Codec for NewSessionTicketPayloadTLS13 {
 // -- RFC6066 certificate status types
 
 /// Only supports OCSP
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct CertificateStatus {
     pub ocsp_response: PayloadU24
 }
@@ -2053,7 +2195,7 @@ impl CertificateStatus {
     }
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub enum HandshakePayload {
     HelloRequest,
     ClientHello(ClientHelloPayload),
@@ -2104,7 +2246,7 @@ impl HandshakePayload {
     }
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct HandshakeMessagePayload {
     pub typ: HandshakeType,
     pub payload: HandshakePayload,

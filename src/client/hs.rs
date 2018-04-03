@@ -79,6 +79,7 @@ fn illegal_param(sess: &mut ClientSessionImpl, why: &str) -> TLSError {
     TLSError::PeerMisbehavedError(why.to_string())
 }
 
+#[cfg(feature = "tls13")]
 fn check_aligned_handshake(sess: &mut ClientSessionImpl) -> Result<(), TLSError> {
     if !sess.common.handshake_joiner.is_empty() {
         Err(illegal_param(sess, "keys changed with pending hs fragment"))
@@ -119,6 +120,7 @@ fn find_kx_hint(sess: &mut ClientSessionImpl, dns_name: webpki::DNSNameRef) -> O
     maybe_value.and_then(|enc| NamedGroup::read_bytes(&enc))
 }
 
+#[cfg(feature = "tls13")]
 fn save_kx_hint(sess: &mut ClientSessionImpl, dns_name: webpki::DNSNameRef, group: NamedGroup) {
     let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
 
@@ -249,7 +251,10 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     };
 
     let support_tls12 = sess.config.versions.contains(&ProtocolVersion::TLSv1_2);
+    #[cfg(feature = "tls13")]
     let support_tls13 = sess.config.versions.contains(&ProtocolVersion::TLSv1_3);
+    #[cfg(not(feature = "tls13"))]
+    let support_tls13 = false;
 
     let mut supported_versions = Vec::new();
     if support_tls13 {
@@ -428,6 +433,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
 }
 
 // Extensions we expect in plaintext in the ServerHello.
+#[cfg(feature = "tls13")]
 static ALLOWED_PLAINTEXT_EXTS: &'static [ExtensionType] = &[
     ExtensionType::KeyShare,
     ExtensionType::PreSharedKey,
@@ -436,6 +442,7 @@ static ALLOWED_PLAINTEXT_EXTS: &'static [ExtensionType] = &[
 
 // Only the intersection of things we offer, and those disallowed
 // in TLS1.3
+#[cfg(feature = "tls13")]
 static DISALLOWED_TLS13_EXTS: &'static [ExtensionType] = &[
     ExtensionType::ECPointFormats,
     ExtensionType::SessionTicket,
@@ -443,6 +450,7 @@ static DISALLOWED_TLS13_EXTS: &'static [ExtensionType] = &[
     ExtensionType::ExtendedMasterSecret,
 ];
 
+#[cfg(feature = "tls13")]
 fn validate_server_hello_tls13(sess: &mut ClientSessionImpl,
                                server_hello: &ServerHelloPayload)
                                -> Result<(), TLSError> {
@@ -470,6 +478,7 @@ fn process_alpn_protocol(sess: &mut ClientSessionImpl,
 }
 
 impl ExpectServerHello {
+    #[cfg(feature = "tls13")]
     fn start_handshake_traffic(&mut self,
                                sess: &mut ClientSessionImpl,
                                server_hello: &ServerHelloPayload)
@@ -531,6 +540,7 @@ impl ExpectServerHello {
         Ok(())
     }
 
+    #[cfg(feature = "tls13")]
     fn into_expect_tls13_encrypted_extensions(self) -> NextState {
         Box::new(ExpectTLS13EncryptedExtensions {
             handshake: self.handshake,
@@ -591,6 +601,7 @@ impl State for ExpectServerHello {
         };
 
         match server_version {
+            #[cfg(feature = "tls13")]
             TLSv1_3 | ProtocolVersion::Unknown(TLS13_DRAFT) if sess.config
                 .versions
                 .contains(&TLSv1_3) => {
@@ -666,10 +677,13 @@ impl State for ExpectServerHello {
         // For TLS1.3, start message encryption using
         // handshake_traffic_secret.
         if sess.common.is_tls13() {
-            validate_server_hello_tls13(sess, server_hello)?;
-            self.start_handshake_traffic(sess, server_hello)?;
-            emit_fake_ccs(&mut self.handshake, sess);
-            return Ok(self.into_expect_tls13_encrypted_extensions());
+            #[cfg(feature = "tls13")]
+            {
+                validate_server_hello_tls13(sess, server_hello)?;
+                self.start_handshake_traffic(sess, server_hello)?;
+                emit_fake_ccs(&mut self.handshake, sess);
+                return Ok(self.into_expect_tls13_encrypted_extensions());
+            }
         }
 
         // TLS1.2 only from here-on
@@ -854,6 +868,7 @@ impl State for ExpectServerHelloOrHelloRetryRequest {
     }
 }
 
+#[cfg(feature = "tls13")]
 fn validate_encrypted_extensions(sess: &mut ClientSessionImpl,
                                  hello: &ClientHelloDetails,
                                  exts: &EncryptedExtensions) -> Result<(), TLSError> {
@@ -881,12 +896,14 @@ fn validate_encrypted_extensions(sess: &mut ClientSessionImpl,
     Ok(())
 }
 
+#[cfg(feature = "tls13")]
 struct ExpectTLS13EncryptedExtensions {
     handshake: HandshakeDetails,
     server_cert: ServerCertDetails,
     hello: ClientHelloDetails,
 }
 
+#[cfg(feature = "tls13")]
 impl ExpectTLS13EncryptedExtensions {
     fn into_expect_tls13_finished_resume(self,
                                          certv: verify::ServerCertVerified,
@@ -907,6 +924,7 @@ impl ExpectTLS13EncryptedExtensions {
     }
 }
 
+#[cfg(feature = "tls13")]
 impl State for ExpectTLS13EncryptedExtensions {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
         check_handshake_message(m, &[HandshakeType::EncryptedExtensions])
@@ -936,12 +954,14 @@ fn sct_list_is_invalid(scts: &SCTList) -> bool {
         scts.iter().any(|sct| sct.0.is_empty())
 }
 
+#[cfg(feature = "tls13")]
 struct ExpectTLS13Certificate {
     handshake: HandshakeDetails,
     server_cert: ServerCertDetails,
     client_auth: Option<ClientAuthDetails>,
 }
 
+#[cfg(feature = "tls13")]
 impl ExpectTLS13Certificate {
     fn into_expect_tls13_certificate_verify(self) -> NextState {
         Box::new(ExpectTLS13CertificateVerify {
@@ -952,6 +972,7 @@ impl ExpectTLS13Certificate {
     }
 }
 
+#[cfg(feature = "tls13")]
 impl State for ExpectTLS13Certificate {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
         check_handshake_message(m, &[HandshakeType::Certificate])
@@ -1110,11 +1131,13 @@ impl State for ExpectTLS12CertificateStatusOrServerKX {
     }
 }
 
+#[cfg(feature = "tls13")]
 struct ExpectTLS13CertificateOrCertReq {
     handshake: HandshakeDetails,
     server_cert: ServerCertDetails,
 }
 
+#[cfg(feature = "tls13")]
 impl ExpectTLS13CertificateOrCertReq {
     fn into_expect_tls13_certificate(self) -> NextState {
         Box::new(ExpectTLS13Certificate {
@@ -1132,6 +1155,7 @@ impl ExpectTLS13CertificateOrCertReq {
     }
 }
 
+#[cfg(feature = "tls13")]
 impl State for ExpectTLS13CertificateOrCertReq {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
         check_handshake_message(m,
@@ -1196,12 +1220,14 @@ impl State for ExpectTLS12ServerKX {
 }
 
 // --- TLS1.3 CertificateVerify ---
+#[cfg(feature = "tls13")]
 struct ExpectTLS13CertificateVerify {
     handshake: HandshakeDetails,
     server_cert: ServerCertDetails,
     client_auth: Option<ClientAuthDetails>,
 }
 
+#[cfg(feature = "tls13")]
 impl ExpectTLS13CertificateVerify {
     fn into_expect_tls13_finished(self,
                                   certv: verify::ServerCertVerified,
@@ -1231,6 +1257,7 @@ fn send_cert_error_alert(sess: &mut ClientSessionImpl, err: TLSError) -> TLSErro
     err
 }
 
+#[cfg(feature = "tls13")]
 impl State for ExpectTLS13CertificateVerify {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
         check_handshake_message(m, &[HandshakeType::CertificateVerify])
@@ -1446,11 +1473,13 @@ impl State for ExpectTLS12CertificateRequest {
 
 // TLS1.3 version of the above.  We then move to expecting the server Certificate.
 // Unfortunately the CertificateRequest type changed in an annoying way in TLS1.3.
+#[cfg(feature = "tls13")]
 struct ExpectTLS13CertificateRequest {
     handshake: HandshakeDetails,
     server_cert: ServerCertDetails,
 }
 
+#[cfg(feature = "tls13")]
 impl ExpectTLS13CertificateRequest {
     fn into_expect_tls13_certificate(self, client_auth: ClientAuthDetails) -> NextState {
         Box::new(ExpectTLS13Certificate {
@@ -1461,6 +1490,7 @@ impl ExpectTLS13CertificateRequest {
     }
 }
 
+#[cfg(feature = "tls13")]
 impl State for ExpectTLS13CertificateRequest {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
         check_handshake_message(m, &[HandshakeType::CertificateRequest])
@@ -1658,9 +1688,13 @@ impl State for ExpectTLS12ServerDone {
             let sig = &st.server_kx.kx_sig;
             let scs = sess.common.get_suite_assert();
             if scs.sign != sig.scheme.sign() {
+                #[cfg(feature = "logging")]
                 let error_message =
                     format!("peer signed kx with wrong algorithm (got {:?} expect {:?})",
                                       sig.scheme.sign(), scs.sign);
+                #[cfg(not(feature = "logging"))]
+                let error_message =
+                    format!("peer signed kx with wrong algorithm");
                 return Err(TLSError::PeerMisbehavedError(error_message));
             }
 
@@ -1842,6 +1876,7 @@ fn save_session(handshake: &mut HandshakeDetails,
     }
 }
 
+#[cfg(feature = "tls13")]
 fn emit_certificate_tls13(handshake: &mut HandshakeDetails,
                           client_auth: &mut ClientAuthDetails,
                           sess: &mut ClientSessionImpl) {
@@ -1872,6 +1907,7 @@ fn emit_certificate_tls13(handshake: &mut HandshakeDetails,
     sess.common.send_msg(m, true);
 }
 
+#[cfg(feature = "tls13")]
 fn emit_certverify_tls13(handshake: &mut HandshakeDetails,
                          client_auth: &mut ClientAuthDetails,
                          sess: &mut ClientSessionImpl) -> Result<(), TLSError> {
@@ -1904,6 +1940,7 @@ fn emit_certverify_tls13(handshake: &mut HandshakeDetails,
     Ok(())
 }
 
+#[cfg(feature = "tls13")]
 fn emit_finished_tls13(handshake: &mut HandshakeDetails,
                        sess: &mut ClientSessionImpl) {
     let handshake_hash = handshake.transcript.get_current_hash();
@@ -1925,6 +1962,7 @@ fn emit_finished_tls13(handshake: &mut HandshakeDetails,
     sess.common.send_msg(m, true);
 }
 
+#[cfg(feature = "tls13")]
 struct ExpectTLS13Finished {
     handshake: HandshakeDetails,
     client_auth: Option<ClientAuthDetails>,
@@ -1932,6 +1970,7 @@ struct ExpectTLS13Finished {
     sig_verified: verify::HandshakeSignatureValid,
 }
 
+#[cfg(feature = "tls13")]
 impl ExpectTLS13Finished {
     fn into_expect_tls13_traffic(self,
                                  fin: verify::FinishedMessageVerified) -> NextState {
@@ -1944,6 +1983,7 @@ impl ExpectTLS13Finished {
     }
 }
 
+#[cfg(feature = "tls13")]
 impl State for ExpectTLS13Finished {
     fn check_message(&self, m: &Message) -> CheckResult {
         check_handshake_message(m, &[HandshakeType::Finished])
@@ -2101,6 +2141,7 @@ impl State for ExpectTLS12Traffic {
 // -- Traffic transit state (TLS1.3) --
 // In this state we can be sent tickets, keyupdates,
 // and application data.
+#[cfg(feature = "tls13")]
 struct ExpectTLS13Traffic {
     handshake: HandshakeDetails,
     _cert_verified: verify::ServerCertVerified,
@@ -2108,6 +2149,7 @@ struct ExpectTLS13Traffic {
     _fin_verified: verify::FinishedMessageVerified,
 }
 
+#[cfg(feature = "tls13")]
 impl ExpectTLS13Traffic {
     fn handle_new_ticket_tls13(&mut self, sess: &mut ClientSessionImpl, m: Message) -> Result<(), TLSError> {
         let nst = extract_handshake!(m, HandshakePayload::NewSessionTicketTLS13).unwrap();
@@ -2147,6 +2189,7 @@ impl ExpectTLS13Traffic {
     }
 }
 
+#[cfg(feature = "tls13")]
 impl State for ExpectTLS13Traffic {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
         check_message(m,

@@ -15,11 +15,22 @@ type SignatureAlgorithms = &'static [&'static webpki::SignatureAlgorithm];
 
 /// Which signature verification mechanisms we support.  No particular
 /// order.
+#[cfg(feature = "ecdsa")]
 static SUPPORTED_SIG_ALGS: SignatureAlgorithms = &[&webpki::ECDSA_P256_SHA256,
                                                    &webpki::ECDSA_P256_SHA384,
                                                    &webpki::ECDSA_P384_SHA256,
                                                    &webpki::ECDSA_P384_SHA384,
                                                    &webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+                                                   &webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
+                                                   &webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
+                                                   &webpki::RSA_PKCS1_2048_8192_SHA1,
+                                                   &webpki::RSA_PKCS1_2048_8192_SHA256,
+                                                   &webpki::RSA_PKCS1_2048_8192_SHA384,
+                                                   &webpki::RSA_PKCS1_2048_8192_SHA512,
+                                                   &webpki::RSA_PKCS1_3072_8192_SHA384];
+
+#[cfg(not(feature = "ecdsa"))]
+static SUPPORTED_SIG_ALGS: SignatureAlgorithms = &[&webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
                                                    &webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
                                                    &webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
                                                    &webpki::RSA_PKCS1_2048_8192_SHA1,
@@ -248,8 +259,10 @@ impl ClientCertVerifier for NoClientAuth {
     }
 }
 
+#[cfg(feature = "ecdsa")]
 static ECDSA_SHA256: SignatureAlgorithms = &[&webpki::ECDSA_P256_SHA256,
                                              &webpki::ECDSA_P384_SHA256];
+#[cfg(feature = "ecdsa")]
 static ECDSA_SHA384: SignatureAlgorithms = &[&webpki::ECDSA_P256_SHA384,
                                              &webpki::ECDSA_P384_SHA384];
 
@@ -264,7 +277,9 @@ static RSA_PSS_SHA512: SignatureAlgorithms = &[&webpki::RSA_PSS_2048_8192_SHA512
 fn convert_scheme(scheme: SignatureScheme) -> Result<SignatureAlgorithms, TLSError> {
     match scheme {
         // nb. for TLS1.2 the curve is not fixed by SignatureScheme.
+        #[cfg(feature = "ecdsa")]
         SignatureScheme::ECDSA_NISTP256_SHA256 => Ok(ECDSA_SHA256),
+        #[cfg(feature = "ecdsa")]
         SignatureScheme::ECDSA_NISTP384_SHA384 => Ok(ECDSA_SHA384),
 
         SignatureScheme::RSA_PKCS1_SHA1 => Ok(RSA_SHA1),
@@ -277,7 +292,10 @@ fn convert_scheme(scheme: SignatureScheme) -> Result<SignatureAlgorithms, TLSErr
         SignatureScheme::RSA_PSS_SHA512 => Ok(RSA_PSS_SHA512),
 
         _ => {
+            #[cfg(feature = "logging")]
             let error_msg = format!("received unadvertised sig scheme {:?}", scheme);
+            #[cfg(not(feature = "logging"))]
+            let error_msg = format!("received unadvertised sig scheme");
             Err(TLSError::PeerMisbehavedError(error_msg))
         }
     }
@@ -322,23 +340,30 @@ pub fn verify_signed_struct(message: &[u8],
         .map(|_| HandshakeSignatureValid::assertion())
 }
 
+#[cfg(feature = "tls13")]
 fn convert_alg_tls13(scheme: SignatureScheme)
                      -> Result<&'static webpki::SignatureAlgorithm, TLSError> {
     use msgs::enums::SignatureScheme::*;
 
     match scheme {
+        #[cfg(feature = "ecdsa")]
         ECDSA_NISTP256_SHA256 => Ok(&webpki::ECDSA_P256_SHA256),
+        #[cfg(feature = "ecdsa")]
         ECDSA_NISTP384_SHA384 => Ok(&webpki::ECDSA_P384_SHA384),
         RSA_PSS_SHA256 => Ok(&webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY),
         RSA_PSS_SHA384 => Ok(&webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY),
         RSA_PSS_SHA512 => Ok(&webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY),
         _ => {
+            #[cfg(feature = "logging")]
             let error_msg = format!("received unsupported sig scheme {:?}", scheme);
+            #[cfg(not(feature = "logging"))]
+            let error_msg = format!("received unsupported sig scheme");
             Err(TLSError::PeerMisbehavedError(error_msg))
         }
     }
 }
 
+#[cfg(feature = "tls13")]
 pub fn verify_tls13(cert: &Certificate,
                     dss: &DigitallySignedStruct,
                     handshake_hash: &[u8],

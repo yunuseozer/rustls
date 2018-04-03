@@ -2,7 +2,8 @@ use msgs::codec;
 use msgs::codec::{Codec, Reader};
 use key;
 /// An externally length'd payload
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct Payload(pub Vec<u8>);
 
 impl Codec for Payload {
@@ -50,7 +51,8 @@ impl Codec for key::Certificate {
 }
 
 /// An arbitrary, unknown-content, u24-length-prefixed payload
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct PayloadU24(pub Vec<u8>);
 
 impl PayloadU24 {
@@ -82,7 +84,8 @@ impl Codec for PayloadU24 {
 }
 
 /// An arbitrary, unknown-content, u16-length-prefixed payload
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct PayloadU16(pub Vec<u8>);
 
 impl PayloadU16 {
@@ -114,7 +117,8 @@ impl Codec for PayloadU16 {
 }
 
 /// An arbitrary, unknown-content, u8-length-prefixed payload
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct PayloadU8(pub Vec<u8>);
 
 impl PayloadU8 {

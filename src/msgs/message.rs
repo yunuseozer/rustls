@@ -10,7 +10,7 @@ use msgs::enums::HandshakeType;
 
 use std::mem;
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub enum MessagePayload {
     Alert(AlertMessagePayload),
     Handshake(HandshakeMessagePayload),
@@ -71,7 +71,7 @@ impl MessagePayload {
 
 /// A TLS frame, named TLSPlaintext in the standard.
 /// This type owns all memory for its interior parts.
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct Message {
     pub typ: ContentType,
     pub version: ProtocolVersion,
@@ -230,7 +230,7 @@ impl<'a> Message {
 ///
 /// This type also cannot decode its internals and
 /// is not a `Codec` type, only `Message` can do that.
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct BorrowMessage<'a> {
     pub typ: ContentType,
     pub version: ProtocolVersion,
