@@ -3,7 +3,6 @@ use msgs::enums::{CipherSuite, ProtocolVersion};
 use msgs::codec::{Reader, Codec};
 use msgs::handshake::CertificatePayload;
 use msgs::base::{PayloadU8, PayloadU16};
-use msgs::codec;
 
 use webpki;
 use untrusted;
@@ -72,10 +71,10 @@ impl Codec for ClientSessionValue {
         self.session_id.encode(bytes);
         self.ticket.encode(bytes);
         self.master_secret.encode(bytes);
-        codec::encode_u64(self.epoch, bytes);
-        codec::encode_u32(self.lifetime, bytes);
-        codec::encode_u32(self.age_add, bytes);
-        codec::encode_u8(if self.extended_ms { 1u8 } else { 0u8 }, bytes);
+        self.epoch.encode(bytes);
+        self.lifetime.encode(bytes);
+        self.age_add.encode(bytes);
+        (if self.extended_ms { 1u8 } else { 0u8 }).encode(bytes);
     }
 
     fn read(r: &mut Reader) -> Option<ClientSessionValue> {
@@ -84,10 +83,10 @@ impl Codec for ClientSessionValue {
         let sid = try_ret!(SessionID::read(r));
         let ticket = try_ret!(PayloadU16::read(r));
         let ms = try_ret!(PayloadU8::read(r));
-        let epoch = try_ret!(codec::read_u64(r));
-        let lifetime = try_ret!(codec::read_u32(r));
-        let age_add = try_ret!(codec::read_u32(r));
-        let extended_ms = try_ret!(codec::read_u8(r));
+        let epoch = try_ret!(u64::read(r));
+        let lifetime = try_ret!(u32::read(r));
+        let age_add = try_ret!(u32::read(r));
+        let extended_ms = try_ret!(u8::read(r));
 
         Some(ClientSessionValue {
             version: v,
@@ -169,23 +168,23 @@ pub struct ServerSessionValue {
 impl Codec for ServerSessionValue {
     fn encode(&self, bytes: &mut Vec<u8>) {
         if let &Some(ref sni) = &self.sni {
-            codec::encode_u8(1, bytes);
+            1u8.encode(bytes);
             let sni_bytes: &str = sni.as_ref().into();
             PayloadU8::new(Vec::from(sni_bytes)).encode(bytes);
         } else {
-            codec::encode_u8(0, bytes);
+            0u8.encode(bytes);
         }
         self.version.encode(bytes);
         self.cipher_suite.encode(bytes);
         self.master_secret.encode(bytes);
-        codec::encode_u8(if self.extended_ms { 1u8 } else { 0u8 }, bytes);
+        (if self.extended_ms { 1u8 } else { 0u8 }).encode(bytes);
         if self.client_cert_chain.is_some() {
             self.client_cert_chain.as_ref().unwrap().encode(bytes);
         }
     }
 
     fn read(r: &mut Reader) -> Option<ServerSessionValue> {
-        let has_sni = try_ret!(codec::read_u8(r));
+        let has_sni = try_ret!(u8::read(r));
         let sni = if has_sni == 1 {
             let dns_name = try_ret!(PayloadU8::read(r));
             let dns_name = try_ret!(webpki::DNSNameRef::try_from_ascii(
@@ -197,7 +196,7 @@ impl Codec for ServerSessionValue {
         let v = try_ret!(ProtocolVersion::read(r));
         let cs = try_ret!(CipherSuite::read(r));
         let ms = try_ret!(PayloadU8::read(r));
-        let ems = try_ret!(codec::read_u8(r));
+        let ems = try_ret!(u8::read(r));
         let ccert = if r.any_left() {
             CertificatePayload::read(r)
         } else {

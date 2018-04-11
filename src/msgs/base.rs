@@ -38,12 +38,12 @@ impl Payload {
 
 impl Codec for key::Certificate {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::encode_u24(self.0.len() as u32, bytes);
+        codec::u24(self.0.len() as u32).encode(bytes);
         bytes.extend_from_slice(&self.0);
     }
 
     fn read(r: &mut Reader) -> Option<key::Certificate> {
-        let len = try_ret!(codec::read_u24(r)) as usize;
+        let len = try_ret!(codec::u24::read(r)).0 as usize;
         let mut sub = try_ret!(r.sub(len));
         let body = sub.rest().to_vec();
         Some(key::Certificate(body))
@@ -71,12 +71,12 @@ impl PayloadU24 {
 
 impl Codec for PayloadU24 {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::encode_u24(self.0.len() as u32, bytes);
+        codec::u24(self.0.len() as u32).encode(bytes);
         bytes.extend_from_slice(&self.0);
     }
 
     fn read(r: &mut Reader) -> Option<PayloadU24> {
-        let len = try_ret!(codec::read_u24(r)) as usize;
+        let len = try_ret!(codec::u24::read(r)).0 as usize;
         let mut sub = try_ret!(r.sub(len));
         let body = sub.rest().to_vec();
         Some(PayloadU24(body))
@@ -104,12 +104,12 @@ impl PayloadU16 {
 
 impl Codec for PayloadU16 {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::encode_u16(self.0.len() as u16, bytes);
+        (self.0.len() as u16).encode(bytes);
         bytes.extend_from_slice(&self.0);
     }
 
     fn read(r: &mut Reader) -> Option<PayloadU16> {
-        let len = try_ret!(codec::read_u16(r)) as usize;
+        let len = try_ret!(u16::read(r)) as usize;
         let mut sub = try_ret!(r.sub(len));
         let body = sub.rest().to_vec();
         Some(PayloadU16(body))
@@ -137,12 +137,12 @@ impl PayloadU8 {
 
 impl Codec for PayloadU8 {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::encode_u8(self.0.len() as u8, bytes);
+        (self.0.len() as u8).encode(bytes);
         bytes.extend_from_slice(&self.0);
     }
 
     fn read(r: &mut Reader) -> Option<PayloadU8> {
-        let len = try_ret!(codec::read_u8(r)) as usize;
+        let len = try_ret!(u8::read(r)) as usize;
         let mut sub = try_ret!(r.sub(len));
         let body = sub.rest().to_vec();
         Some(PayloadU8(body))
