@@ -284,6 +284,7 @@ pub use server::ProducesTickets;
 pub use ticketer::Ticketer;
 pub use verify::{NoClientAuth, AllowAnyAuthenticatedClient,
                  AllowAnyAnonymousOrAuthenticatedClient};
+pub use verify::WebPKIVerifier;
 pub use suites::{ALL_CIPHERSUITES, SupportedCipherSuite};
 pub use key::{Certificate, PrivateKey};
 
