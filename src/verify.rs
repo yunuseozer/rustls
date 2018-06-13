@@ -100,7 +100,9 @@ pub trait ClientCertVerifier : Send + Sync {
                           presented_certs: &[Certificate]) -> Result<ClientCertVerified, TLSError>;
 }
 
+/// WebPKIVerifier
 pub struct WebPKIVerifier {
+    /// time
     pub time: fn() -> Result<webpki::Time, TLSError>,
 }
 
@@ -128,6 +130,7 @@ impl ServerCertVerifier for WebPKIVerifier {
 }
 
 impl WebPKIVerifier {
+    /// new()
     pub fn new() -> WebPKIVerifier {
         WebPKIVerifier {
             time: try_now,
