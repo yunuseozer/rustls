@@ -1,13 +1,16 @@
 use session::{Session, SessionCommon};
+use keylog::{KeyLog, NoKeyLog};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::enums::{ContentType, SignatureScheme};
 use msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
-use msgs::handshake::SessionID;
+use msgs::handshake::{ServerExtension, SessionID};
 use msgs::message::Message;
 use error::TLSError;
 use sign;
 use verify;
 use key;
+use vecbuf::WriteV;
+
 use webpki;
 
 use std::sync::Arc;
@@ -126,6 +129,10 @@ pub struct ServerConfig {
 
     /// How to verify client certificates.
     pub verifier: Arc<verify::ClientCertVerifier>,
+
+    /// How to output key material for debugging.  The default
+    /// does nothing.
+    pub key_log: Arc<KeyLog>,
 }
 
 impl ServerConfig {
@@ -153,6 +160,7 @@ impl ServerConfig {
             cert_resolver: Arc::new(handy::FailResolveChain {}),
             versions: vec![ ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2 ],
             verifier: client_cert_verifier,
+            key_log: Arc::new(NoKeyLog {}),
         }
     }
 
@@ -170,17 +178,21 @@ impl ServerConfig {
     /// certificate and key is used for all subsequent connections,
     /// irrespective of things like SNI hostname.
     ///
-    /// Note that the end-entity certificate must have the 
-    /// [Subject Alternative Name](https://tools.ietf.org/html/rfc6125#section-4.1) 
-    /// extension to describe, e.g., the valid DNS name. The `commonName` field is 
+    /// Note that the end-entity certificate must have the
+    /// [Subject Alternative Name](https://tools.ietf.org/html/rfc6125#section-4.1)
+    /// extension to describe, e.g., the valid DNS name. The `commonName` field is
     /// disregarded.
     ///
     /// `cert_chain` is a vector of DER-encoded certificates.
-    /// `key_der` is a DER-encoded RSA private key.
+    /// `key_der` is a DER-encoded RSA or ECDSA private key.
+    ///
+    /// This function fails if `key_der` is invalid.
     pub fn set_single_cert(&mut self,
                            cert_chain: Vec<key::Certificate>,
-                           key_der: key::PrivateKey) {
-        self.cert_resolver = Arc::new(handy::AlwaysResolvesChain::new_rsa(cert_chain, &key_der));
+                           key_der: key::PrivateKey) -> Result<(), TLSError> {
+        let resolver = handy::AlwaysResolvesChain::new(cert_chain, &key_der)?;
+        self.cert_resolver = Arc::new(resolver);
+        Ok(())
     }
 
     /// Sets a single certificate chain, matching private key and OCSP
@@ -188,20 +200,23 @@ impl ServerConfig {
     /// connections, irrespective of things like SNI hostname.
     ///
     /// `cert_chain` is a vector of DER-encoded certificates.
-    /// `key_der` is a DER-encoded RSA private key.
+    /// `key_der` is a DER-encoded RSA or ECDSA private key.
     /// `ocsp` is a DER-encoded OCSP response.  Ignored if zero length.
     /// `scts` is an `SignedCertificateTimestampList` encoding (see RFC6962)
     /// and is ignored if empty.
+    ///
+    /// This function fails if `key_der` is invalid.
     pub fn set_single_cert_with_ocsp_and_sct(&mut self,
                                              cert_chain: Vec<key::Certificate>,
                                              key_der: key::PrivateKey,
                                              ocsp: Vec<u8>,
-                                             scts: Vec<u8>) {
-        let resolver = handy::AlwaysResolvesChain::new_rsa_with_extras(cert_chain,
-                                                                       &key_der,
-                                                                       ocsp,
-                                                                       scts);
+                                             scts: Vec<u8>) -> Result<(), TLSError> {
+        let resolver = handy::AlwaysResolvesChain::new_with_extras(cert_chain,
+                                                                   &key_der,
+                                                                   ocsp,
+                                                                   scts)?;
         self.cert_resolver = Arc::new(resolver);
+        Ok(())
     }
 
     /// Set the ALPN protocol list to the given protocol names.
@@ -220,6 +235,7 @@ pub struct ServerSessionImpl {
     pub common: SessionCommon,
     sni: Option<webpki::DNSName>,
     pub alpn_protocol: Option<String>,
+    pub quic_params: Option<Vec<u8>>,
     pub error: Option<TLSError>,
     pub state: Option<Box<hs::State + Send + Sync>>,
     pub client_cert_chain: Option<Vec<key::Certificate>>,
@@ -232,7 +248,8 @@ impl fmt::Debug for ServerSessionImpl {
 }
 
 impl ServerSessionImpl {
-    pub fn new(server_config: &Arc<ServerConfig>) -> ServerSessionImpl {
+    pub fn new(server_config: &Arc<ServerConfig>, extra_exts: Vec<ServerExtension>)
+               -> ServerSessionImpl {
         let perhaps_client_auth = server_config.verifier.offer_client_auth();
 
         ServerSessionImpl {
@@ -240,8 +257,9 @@ impl ServerSessionImpl {
             common: SessionCommon::new(server_config.mtu, false),
             sni: None,
             alpn_protocol: None,
+            quic_params: None,
             error: None,
-            state: Some(Box::new(hs::ExpectClientHello::new(perhaps_client_auth))),
+            state: Some(Box::new(hs::ExpectClientHello::new(perhaps_client_auth, extra_exts))),
             client_cert_chain: None,
         }
     }
@@ -399,14 +417,14 @@ impl ServerSessionImpl {
 #[derive(Debug)]
 pub struct ServerSession {
     // We use the pimpl idiom to hide unimportant details.
-    imp: ServerSessionImpl,
+    pub(crate) imp: ServerSessionImpl,
 }
 
 impl ServerSession {
     /// Make a new ServerSession.  `config` controls how
     /// we behave in the TLS protocol.
     pub fn new(config: &Arc<ServerConfig>) -> ServerSession {
-        ServerSession { imp: ServerSessionImpl::new(config) }
+        ServerSession { imp: ServerSessionImpl::new(config, vec![]) }
     }
 
     /// Retrieves the SNI hostname, if any, used to select the certificate and
@@ -438,6 +456,10 @@ impl Session for ServerSession {
     /// Writes TLS messages to `wr`.
     fn write_tls(&mut self, wr: &mut io::Write) -> io::Result<usize> {
         self.imp.common.write_tls(wr)
+    }
+
+    fn writev_tls(&mut self, wr: &mut WriteV) -> io::Result<usize> {
+        self.imp.common.writev_tls(wr)
     }
 
     fn process_new_packets(&mut self) -> Result<(), TLSError> {

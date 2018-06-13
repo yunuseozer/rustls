@@ -30,10 +30,6 @@ impl Payload {
         v.extend_from_slice(data);
         Payload(v)
     }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
 }
 
 impl Codec for key::Certificate {
@@ -43,8 +39,8 @@ impl Codec for key::Certificate {
     }
 
     fn read(r: &mut Reader) -> Option<key::Certificate> {
-        let len = try_ret!(codec::u24::read(r)).0 as usize;
-        let mut sub = try_ret!(r.sub(len));
+        let len = codec::u24::read(r)?.0 as usize;
+        let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
         Some(key::Certificate(body))
     }
@@ -60,10 +56,6 @@ impl PayloadU24 {
         PayloadU24(bytes)
     }
 
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
     pub fn empty() -> PayloadU24 {
         PayloadU24::new(Vec::new())
     }
@@ -76,8 +68,8 @@ impl Codec for PayloadU24 {
     }
 
     fn read(r: &mut Reader) -> Option<PayloadU24> {
-        let len = try_ret!(codec::u24::read(r)).0 as usize;
-        let mut sub = try_ret!(r.sub(len));
+        let len = codec::u24::read(r)?.0 as usize;
+        let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
         Some(PayloadU24(body))
     }
@@ -93,10 +85,6 @@ impl PayloadU16 {
         PayloadU16(bytes)
     }
 
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
     pub fn empty() -> PayloadU16 {
         PayloadU16::new(Vec::new())
     }
@@ -109,8 +97,8 @@ impl Codec for PayloadU16 {
     }
 
     fn read(r: &mut Reader) -> Option<PayloadU16> {
-        let len = try_ret!(u16::read(r)) as usize;
-        let mut sub = try_ret!(r.sub(len));
+        let len = u16::read(r)? as usize;
+        let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
         Some(PayloadU16(body))
     }
@@ -129,10 +117,6 @@ impl PayloadU8 {
     pub fn empty() -> PayloadU8 {
         PayloadU8(Vec::new())
     }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
 }
 
 impl Codec for PayloadU8 {
@@ -142,8 +126,8 @@ impl Codec for PayloadU8 {
     }
 
     fn read(r: &mut Reader) -> Option<PayloadU8> {
-        let len = try_ret!(u8::read(r)) as usize;
-        let mut sub = try_ret!(r.sub(len));
+        let len = u8::read(r)? as usize;
+        let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
         Some(PayloadU8(body))
     }

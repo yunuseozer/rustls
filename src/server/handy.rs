@@ -109,26 +109,31 @@ impl server::ResolvesServerCert for FailResolveChain {
 pub struct AlwaysResolvesChain(sign::CertifiedKey);
 
 impl AlwaysResolvesChain {
-    pub fn new_rsa(chain: Vec<key::Certificate>,
-                   priv_key: &key::PrivateKey) -> AlwaysResolvesChain {
-        let key = sign::RSASigningKey::new(priv_key)
-            .expect("Invalid RSA private key");
-        let key: Arc<Box<sign::SigningKey>> = Arc::new(Box::new(key));
-        AlwaysResolvesChain(sign::CertifiedKey::new(chain, key))
+    /// Creates an `AlwaysResolvesChain`, auto-detecting the underlying private
+    /// key type and encoding.
+    pub fn new(chain: Vec<key::Certificate>,
+               priv_key: &key::PrivateKey) -> Result<AlwaysResolvesChain, TLSError> {
+        let key = sign::any_supported_type(priv_key)
+            .map_err(|_| TLSError::General("invalid private key".into()))?;
+        Ok(AlwaysResolvesChain(sign::CertifiedKey::new(chain, Arc::new(key))))
     }
 
-    pub fn new_rsa_with_extras(chain: Vec<key::Certificate>,
-                               priv_key: &key::PrivateKey,
-                               ocsp: Vec<u8>,
-                               scts: Vec<u8>) -> AlwaysResolvesChain {
-        let mut r = AlwaysResolvesChain::new_rsa(chain, priv_key);
+    /// Creates an `AlwaysResolvesChain`, auto-detecting the underlying private
+    /// key type and encoding.
+    ///
+    /// If non-empty, the given OCSP response and SCTs are attached.
+    pub fn new_with_extras(chain: Vec<key::Certificate>,
+                           priv_key: &key::PrivateKey,
+                           ocsp: Vec<u8>,
+                           scts: Vec<u8>) -> Result<AlwaysResolvesChain, TLSError> {
+        let mut r = AlwaysResolvesChain::new(chain, priv_key)?;
         if !ocsp.is_empty() {
             r.0.ocsp = Some(ocsp);
         }
         if !scts.is_empty() {
             r.0.sct_list = Some(scts);
         }
-        r
+        Ok(r)
     }
 }
 
@@ -175,7 +180,7 @@ impl server::ResolvesServerCert for ResolvesServerCertUsingSNI {
                -> Option<sign::CertifiedKey> {
         if let Some(name) = server_name {
             self.by_name.get(name.into())
-                .map(|ck| ck.clone())
+                .cloned()
         } else {
             // This kind of resolver requires SNI
             None

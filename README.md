@@ -1,4 +1,5 @@
-# Rustls
+![Logo](https://raw.githubusercontent.com/ctz/rustls/master/admin/rustls-logo-web.png)
+
 Rustls is a modern TLS library written in Rust.  It's pronounced 'rustles'.
 It uses [*ring*](https://github.com/briansmith/ring) for cryptography
 and [libwebpki](https://github.com/briansmith/webpki) for certificate
@@ -15,6 +16,12 @@ Rustls is currently in development and hence unstable.  [Here's what I'm working
 
 * Next release:
   - Move TLS1.3 support from draft 22 to 23.
+  - Add support for `SSLKEYLOGFILE`; not enabled by default.
+  - Add support for basic usage in QUIC.
+  - `ServerConfig::set_single_cert` and company now report errors.
+  - Add support for vectored IO: `writev_tls` can now be used to
+    optimise system call usage.
+  - Support ECDSA signing for server and client authentication.
 * 0.12.0 (2018-01-06):
   - New API for learning negotiated cipher suite.
   - Move TLS1.3 support from draft 18 to 22.
@@ -95,16 +102,17 @@ obsolete cryptography.
 
 * TLS1.2 and TLS1.3 (draft 23) only.
 * ECDSA or RSA server authentication by clients.
-* RSA server authentication by servers.
+* ECDSA or RSA server authentication by servers.
 * Forward secrecy using ECDHE; with curve25519, nistp256 or nistp384 curves.
 * AES128-GCM and AES256-GCM bulk encryption, with safe nonces.
 * Chacha20Poly1305 bulk encryption.
 * ALPN support.
 * SNI support.
 * Tunable MTU to make TLS messages match size of underlying transport.
+* Optional use of vectored IO to minimise system calls.
 * TLS1.2 session resumption.
 * TLS1.2 resumption via tickets (RFC5077).
-* TLS1.3 resumption via tickets.
+* TLS1.3 resumption via tickets or session storage.
 * Client authentication by clients.
 * Client authentication by servers.
 * Extended master secret support (RFC7627).
@@ -115,7 +123,6 @@ obsolete cryptography.
 
 ## Possible future features
 
-* ECDSA server authentication by servers.
 * PSK support.
 * OCSP verification by clients.
 * Certificate pinning.
@@ -169,10 +176,12 @@ Options:
     --auth-key KEY      Read client authentication key from KEY.
     --auth-certs CERTS  Read client authentication certificates from CERTS.
                         CERTS must match up with KEY.
+    --protover VERSION  Disable default TLS version list, and use
+                        VERSION instead.  May be used multiple times.
     --suite SUITE       Disable default cipher suite list, and use
                         SUITE instead.  May be used multiple times.
     --proto PROTOCOL    Send ALPN extension containing PROTOCOL.
-                        May be used multiple times to offer serveral protocols.
+                        May be used multiple times to offer several protocols.
     --cache CACHE       Save session cache to file CACHE.
     --no-tickets        Disable session ticket support.
     --no-sni            Disable server name indication support.
@@ -243,6 +252,8 @@ Options:
                         authentication.
     --resumption        Support session resumption.
     --tickets           Support tickets.
+    --protover VERSION  Disable default TLS version list, and use
+                        VERSION instead.  May be used multiple times.
     --suite SUITE       Disable default cipher suite list, and use
                         SUITE instead.  May be used multiple times.
     --proto PROTOCOL    Negotiate PROTOCOL using ALPN.

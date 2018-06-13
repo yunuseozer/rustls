@@ -11,17 +11,18 @@ use msgs::enums::KeyUpdateRequest;
 use error::TLSError;
 use suites::SupportedCipherSuite;
 use cipher::{MessageDecrypter, MessageEncrypter, self};
-use vecbuf::ChunkVecBuffer;
+use vecbuf::{ChunkVecBuffer, WriteV};
 use key;
 use key_schedule::{SecretKind, KeySchedule};
 use prf;
 use rand;
+use quic;
 
 use std::io;
 use std::collections::VecDeque;
 
 /// Generalises `ClientSession` and `ServerSession`
-pub trait Session: Read + Write + Send + Sync {
+pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
     /// Read TLS content from `rd`.  This method does internal
     /// buffering, so `rd` can supply TLS messages in arbitrary-
     /// sized chunks (like a socket or pipe might).
@@ -49,6 +50,11 @@ pub trait Session: Read + Write + Send + Sync {
     ///
     /// [`wants_write`]: #tymethod.wants_write
     fn write_tls(&mut self, wr: &mut Write) -> Result<usize, io::Error>;
+
+    /// Like `write_tls`, but writes potentially many records in one
+    /// go via `wr`; a `rustls::WriteV`.  This function has the same semantics
+    /// as `write_tls` otherwise.
+    fn writev_tls(&mut self, wr: &mut WriteV) -> Result<usize, io::Error>;
 
     /// Processes any new packets read by a previous call to `read_tls`.
     /// Errors from this function relate to TLS protocol errors, and
@@ -239,7 +245,7 @@ fn join_randoms(first: &[u8], second: &[u8]) -> [u8; 64] {
 pub struct SessionSecrets {
     pub randoms: SessionRandoms,
     hash: &'static ring::digest::Algorithm,
-    master_secret: [u8; 48],
+    pub master_secret: [u8; 48],
 }
 
 impl SessionSecrets {
@@ -507,11 +513,8 @@ impl SessionCommon {
     pub fn process_alert(&mut self, msg: Message) -> Result<(), TLSError> {
         if let MessagePayload::Alert(ref alert) = msg.payload {
             // Reject unknown AlertLevels.
-            match alert.level {
-                AlertLevel::Unknown(_) => {
-                    self.send_fatal_alert(AlertDescription::IllegalParameter);
-                }
-                _ => {}
+            if let AlertLevel::Unknown(_) = alert.level {
+                self.send_fatal_alert(AlertDescription::IllegalParameter);
             }
 
             // If we get a CloseNotify, make a note to declare EOF to our
@@ -642,6 +645,10 @@ impl SessionCommon {
 
     pub fn write_tls(&mut self, wr: &mut Write) -> io::Result<usize> {
         self.sendable_tls.write_to(wr)
+    }
+
+    pub fn writev_tls(&mut self, wr: &mut WriteV) -> io::Result<usize> {
+        self.sendable_tls.writev_to(wr)
     }
 
     /// Send plaintext application data, fragmenting and
