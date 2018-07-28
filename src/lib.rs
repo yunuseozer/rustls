@@ -280,7 +280,7 @@ pub use msgs::enums::SignatureScheme;
 pub use msgs::enums::CipherSuite;
 pub use error::TLSError;
 pub use session::Session;
-pub use stream::Stream;
+pub use stream::{Stream, StreamOwned};
 pub use anchors::{DistinguishedNames, RootCertStore};
 pub use client::StoresClientSessions;
 pub use client::handy::{NoClientSessionStorage, ClientSessionMemoryCache};
@@ -295,8 +295,7 @@ pub use server::ProducesTickets;
 pub use ticketer::Ticketer;
 pub use verify::{NoClientAuth, AllowAnyAuthenticatedClient,
                  AllowAnyAnonymousOrAuthenticatedClient};
-pub use verify::WebPKIVerifier;
-pub use suites::{ALL_CIPHERSUITES, SupportedCipherSuite};
+pub use suites::{ALL_CIPHERSUITES, BulkAlgorithm, SupportedCipherSuite};
 pub use key::{Certificate, PrivateKey};
 pub use keylog::{KeyLog, NoKeyLog, KeyLogFile};
 pub use vecbuf::WriteV;
