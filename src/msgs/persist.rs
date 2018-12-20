@@ -15,7 +15,7 @@ use std::cmp;
 // --- Client types ---
 /// Keys for session resumption and tickets.
 /// Matching value is a `ClientSessionValue`.
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct ClientSessionKey {
     kind: &'static [u8],
     dns_name: PayloadU8,
@@ -51,7 +51,7 @@ impl ClientSessionKey {
     }
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct ClientSessionValue {
     pub version: ProtocolVersion,
     pub cipher_suite: CipherSuite,
@@ -164,7 +164,7 @@ impl ClientSessionValue {
 // --- Server types ---
 pub type ServerSessionKey = SessionID;
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct ServerSessionValue {
     pub sni: Option<webpki::DNSName>,
     pub version: ProtocolVersion,

@@ -5,7 +5,8 @@ use webpki;
 use sct;
 
 /// rustls reports protocol errors using this type.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub enum TLSError {
     /// We received a TLS message that isn't valid right now.
     /// `expect_types` lists the message types we can expect right now.
@@ -75,6 +76,21 @@ pub enum TLSError {
     PeerSentOversizedRecord,
 }
 
+#[cfg(not(feature = "logging"))]
+impl fmt::Debug for TLSError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Error string not enabled")
+    }
+}
+
+#[cfg(not(feature = "logging"))]
+impl fmt::Display for TLSError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Error string not enabled")
+    }
+}
+
+#[cfg(feature = "logging")]
 fn join<T: fmt::Debug>(items: &[T]) -> String {
     items.iter()
         .map(|x| format!("{:?}", x))
@@ -82,6 +98,7 @@ fn join<T: fmt::Debug>(items: &[T]) -> String {
         .join(" or ")
 }
 
+#[cfg(feature = "logging")]
 impl fmt::Display for TLSError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {

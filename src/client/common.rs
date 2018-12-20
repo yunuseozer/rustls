@@ -31,6 +31,7 @@ impl ServerCertDetails {
         }
     }
 
+    #[cfg(feature = "tls13")]
     pub fn take_chain(&mut self) -> CertificatePayload {
         mem::replace(&mut self.cert_chain, Vec::new())
     }
@@ -101,6 +102,7 @@ impl ClientHelloDetails {
             .map(|idx| self.offered_key_shares.remove(idx))
     }
 
+    #[cfg(feature = "tls13")]
     pub fn find_key_share_and_discard_others(&mut self, group: NamedGroup)
             -> Option<suites::KeyExchange> {
         match self.find_key_share(group) {

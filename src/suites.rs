@@ -10,15 +10,18 @@ use untrusted;
 
 /// Bulk symmetric encryption scheme used by a cipher suite.
 #[allow(non_camel_case_types)]
-#[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub enum BulkAlgorithm {
     /// AES with 128-bit keys in Galois counter mode.
+    #[cfg(feature = "aesgcm")]
     AES_128_GCM,
 
     /// AES with 256-bit keys in Galois counter mode.
+    #[cfg(feature = "aesgcm")]
     AES_256_GCM,
 
     /// Chacha20 for confidentiality with poly1305 for authenticity.
+    #[cfg(feature = "chachapoly")]
     CHACHA20_POLY1305,
 }
 
@@ -42,8 +45,11 @@ impl KeyExchange {
     pub fn named_group_to_ecdh_alg(group: NamedGroup)
                                    -> Option<&'static ring::agreement::Algorithm> {
         match group {
+            #[cfg(feature = "x25519")]
             NamedGroup::X25519 => Some(&ring::agreement::X25519),
+            #[cfg(feature = "ecdh")]
             NamedGroup::secp256r1 => Some(&ring::agreement::ECDH_P256),
+            #[cfg(feature = "ecdh")]
             NamedGroup::secp384r1 => Some(&ring::agreement::ECDH_P384),
             _ => None,
         }
@@ -117,7 +123,7 @@ impl KeyExchange {
 ///
 /// All possible instances of this class are provided by the library in
 /// the `ALL_CIPHERSUITES` array.
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct SupportedCipherSuite {
     /// The TLS enumeration naming this cipher suite.
     pub suite: CipherSuite,
@@ -219,8 +225,11 @@ impl SupportedCipherSuite {
     /// Which AEAD algorithm to use for this suite.
     pub fn get_aead_alg(&self) -> &'static ring::aead::Algorithm {
         match self.bulk {
+            #[cfg(feature = "aesgcm")]
             BulkAlgorithm::AES_128_GCM => &ring::aead::AES_128_GCM,
+            #[cfg(feature = "aesgcm")]
             BulkAlgorithm::AES_256_GCM => &ring::aead::AES_256_GCM,
+            #[cfg(feature = "chachapoly")]
             BulkAlgorithm::CHACHA20_POLY1305 => &ring::aead::CHACHA20_POLY1305,
         }
     }
@@ -234,6 +243,7 @@ impl SupportedCipherSuite {
     /// Return true if this suite is usable for TLS `version`.
     pub fn usable_for_version(&self, version: ProtocolVersion) -> bool {
         match version {
+            #[cfg(feature = "tls13")]
             ProtocolVersion::TLSv1_3 => self.sign == SignatureAlgorithm::Anonymous,
             ProtocolVersion::TLSv1_2 => self.sign != SignatureAlgorithm::Anonymous,
             _ => false,
@@ -259,6 +269,7 @@ impl SupportedCipherSuite {
     }
 }
 
+#[cfg(all(feature = "chachapoly", feature = "ecdsa"))]
 pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
     SupportedCipherSuite {
         suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
@@ -271,6 +282,7 @@ pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         explicit_nonce_len: 0,
     };
 
+#[cfg(feature = "chachapoly")]
 pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
     SupportedCipherSuite {
         suite: CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
@@ -283,6 +295,7 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         explicit_nonce_len: 0,
     };
 
+#[cfg(feature = "aesgcm")]
 pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = SupportedCipherSuite {
     suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
     kx: KeyExchangeAlgorithm::ECDHE,
@@ -294,6 +307,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = Support
     explicit_nonce_len: 8,
 };
 
+#[cfg(feature = "aesgcm")]
 pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = SupportedCipherSuite {
     suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
     kx: KeyExchangeAlgorithm::ECDHE,
@@ -305,6 +319,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = Support
     explicit_nonce_len: 8,
 };
 
+#[cfg(all(feature = "aesgcm", feature = "ecdsa"))]
 pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = SupportedCipherSuite {
     suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
     kx: KeyExchangeAlgorithm::ECDHE,
@@ -316,6 +331,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = Suppo
     explicit_nonce_len: 8,
 };
 
+#[cfg(all(feature = "aesgcm", feature = "ecdsa"))]
 pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = SupportedCipherSuite {
     suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
     kx: KeyExchangeAlgorithm::ECDHE,
@@ -327,6 +343,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = Suppo
     explicit_nonce_len: 8,
 };
 
+#[cfg(all(feature = "chachapoly", feature = "tls13"))]
 pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite = SupportedCipherSuite {
     suite: CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
     kx: KeyExchangeAlgorithm::BulkOnly,
@@ -338,6 +355,7 @@ pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite = SupportedCiphe
     explicit_nonce_len: 0,
 };
 
+#[cfg(all(feature = "aesgcm", feature = "tls13"))]
 pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite = SupportedCipherSuite {
     suite: CipherSuite::TLS13_AES_256_GCM_SHA384,
     kx: KeyExchangeAlgorithm::BulkOnly,
@@ -349,6 +367,7 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite = SupportedCipherSuite
     explicit_nonce_len: 0,
 };
 
+#[cfg(all(feature = "aesgcm", feature = "tls13"))]
 pub static TLS13_AES_128_GCM_SHA256: SupportedCipherSuite = SupportedCipherSuite {
     suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
     kx: KeyExchangeAlgorithm::BulkOnly,
@@ -361,6 +380,7 @@ pub static TLS13_AES_128_GCM_SHA256: SupportedCipherSuite = SupportedCipherSuite
 };
 
 /// A list of all the cipher suites supported by rustls.
+#[cfg(all(feature = "aesgcm", feature = "chachapoly", feature = "tls13", feature = "ecdsa"))]
 pub static ALL_CIPHERSUITES: [&'static SupportedCipherSuite; 9] =
     [// TLS1.3 suites
      &TLS13_CHACHA20_POLY1305_SHA256,
@@ -374,6 +394,110 @@ pub static ALL_CIPHERSUITES: [&'static SupportedCipherSuite; 9] =
      &TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
      &TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
      &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256];
+
+/// A list of all the cipher suites supported by rustls.
+#[cfg(all(feature = "aesgcm", feature = "chachapoly", feature = "tls13", not(feature = "ecdsa")))]
+pub static ALL_CIPHERSUITES: [&'static SupportedCipherSuite; 6] =
+    [// TLS1.3 suites
+     &TLS13_CHACHA20_POLY1305_SHA256,
+     &TLS13_AES_256_GCM_SHA384,
+     &TLS13_AES_128_GCM_SHA256,
+
+     // TLS1.2 suites
+     &TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+     &TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+     &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256];
+
+/// A list of all the cipher suites supported by rustls.
+#[cfg(all(feature = "aesgcm", feature = "chachapoly", not(feature = "tls13"), feature = "ecdsa"))]
+pub static ALL_CIPHERSUITES: [&'static SupportedCipherSuite; 6] =
+    [// TLS1.2 suites
+     &TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+     &TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+     &TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+     &TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+     &TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+     &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256];
+
+/// A list of all the cipher suites supported by rustls.
+#[cfg(all(feature = "aesgcm", feature = "chachapoly", not(feature = "tls13"), not(feature = "ecdsa")))]
+pub static ALL_CIPHERSUITES: [&'static SupportedCipherSuite; 3] =
+    [// TLS1.2 suites
+     &TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+     &TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+     &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256];
+
+/// A list of all the cipher suites supported by rustls.
+#[cfg(all(feature = "aesgcm", not(feature = "chachapoly"), feature = "tls13", feature = "ecdsa"))]
+pub static ALL_CIPHERSUITES: [&'static SupportedCipherSuite; 6] =
+    [// TLS1.3 suites
+     &TLS13_AES_256_GCM_SHA384,
+     &TLS13_AES_128_GCM_SHA256,
+
+     // TLS1.2 suites
+     &TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+     &TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+     &TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+     &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256];
+
+/// A list of all the cipher suites supported by rustls.
+#[cfg(all(feature = "aesgcm", not(feature = "chachapoly"), feature = "tls13", not(feature = "ecdsa")))]
+pub static ALL_CIPHERSUITES: [&'static SupportedCipherSuite; 4] =
+    [// TLS1.3 suites
+     &TLS13_AES_256_GCM_SHA384,
+     &TLS13_AES_128_GCM_SHA256,
+
+     // TLS1.2 suites
+     &TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+     &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256];
+
+/// A list of all the cipher suites supported by rustls.
+#[cfg(all(feature = "aesgcm", not(feature = "chachapoly"), not(feature = "tls13"), feature = "ecdsa"))]
+pub static ALL_CIPHERSUITES: [&'static SupportedCipherSuite; 4] =
+    [// TLS1.2 suites
+     &TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+     &TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+     &TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+     &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256];
+
+/// A list of all the cipher suites supported by rustls.
+#[cfg(all(feature = "aesgcm", not(feature = "chachapoly"), not(feature = "tls13"), not(feature = "ecdsa")))]
+pub static ALL_CIPHERSUITES: [&'static SupportedCipherSuite; 2] =
+    [// TLS1.2 suites
+     &TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+     &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256];
+
+/// A list of all the cipher suites supported by rustls.
+#[cfg(all(feature = "chachapoly", not(feature = "aesgcm"), feature = "tls13", feature = "ecdsa"))]
+pub static ALL_CIPHERSUITES: [&'static SupportedCipherSuite; 3] =
+    [// TLS1.3 suites
+     &TLS13_CHACHA20_POLY1305_SHA256,
+
+     // TLS1.2 suites
+     &TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+     &TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256];
+
+/// A list of all the cipher suites supported by rustls.
+#[cfg(all(feature = "chachapoly", not(feature = "aesgcm"), feature = "tls13", not(feature = "ecdsa")))]
+pub static ALL_CIPHERSUITES: [&'static SupportedCipherSuite; 2] =
+    [// TLS1.3 suites
+     &TLS13_CHACHA20_POLY1305_SHA256,
+
+     // TLS1.2 suites
+     &TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256];
+
+/// A list of all the cipher suites supported by rustls.
+#[cfg(all(feature = "chachapoly", not(feature = "aesgcm"), not(feature = "tls13"), feature = "ecdsa"))]
+pub static ALL_CIPHERSUITES: [&'static SupportedCipherSuite; 2] =
+    [// TLS1.2 suites
+     &TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+     &TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256];
+
+/// A list of all the cipher suites supported by rustls.
+#[cfg(all(feature = "chachapoly", not(feature = "aesgcm"), not(feature = "tls13"), not(feature = "ecdsa")))]
+pub static ALL_CIPHERSUITES: [&'static SupportedCipherSuite; 1] =
+    [// TLS1.2 suites
+     &TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256];
 
 // These both O(N^2)!
 pub fn choose_ciphersuite_preferring_client(client_suites: &[CipherSuite],

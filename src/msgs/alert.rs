@@ -1,7 +1,7 @@
 use crate::msgs::enums::{AlertLevel, AlertDescription};
 use crate::msgs::codec::{Codec, Reader};
 
-#[derive(Debug)]
+#[cfg_attr(feature = "logging", derive(Debug))]
 pub struct AlertMessagePayload {
     pub level: AlertLevel,
     pub description: AlertDescription,

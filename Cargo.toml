@@ -18,10 +18,20 @@ ring = "0.14"
 webpki = "0.19"
 sct = "0.5"
 
+[patch.crates-io]
+webpki = { git = "https://github.com/mesalock-linux/webpki", branch = "develop", default-features = true }
+sct = { git = "https://github.com/mesalock-linux/sct.rs", branch = "develop", default-features = false }
+
 [features]
-default = ["logging"]
+default=["logging", "aesgcm", "chachapoly", "tls13", "x25519", "ecdh", "ecdsa"]
 logging = ["log"]
 dangerous_configuration = []
+aesgcm = []
+chachapoly = []
+tls13 = []
+x25519 = []
+ecdh = []
+ecdsa = ["sct/ecdsa"]
 quic = []
 
 [dev-dependencies]
@@ -35,6 +45,11 @@ webpki-roots = "0.16"
 ct-logs = "0.5"
 regex = "1.0"
 vecio = "0.1"
+
+[profile.release]
+opt-level = "z"
+lto = true
+panic = "abort"
 
 [[example]]
 name = "bogo_shim"

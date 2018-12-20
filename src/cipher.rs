@@ -88,6 +88,7 @@ pub fn new_tls12(scs: &'static SupportedCipherSuite,
     let aead_alg = scs.get_aead_alg();
 
     match scs.bulk {
+        #[cfg(feature = "aesgcm")]
         BulkAlgorithm::AES_128_GCM |
         BulkAlgorithm::AES_256_GCM => {
             (Box::new(GCMMessageDecrypter::new(aead_alg,
@@ -98,7 +99,7 @@ pub fn new_tls12(scs: &'static SupportedCipherSuite,
                                                write_iv,
                                                explicit_nonce_offs)))
         }
-
+        #[cfg(feature = "chachapoly")]
         BulkAlgorithm::CHACHA20_POLY1305 => {
             (Box::new(ChaCha20Poly1305MessageDecrypter::new(aead_alg,
                                                             read_key,
@@ -110,6 +111,7 @@ pub fn new_tls12(scs: &'static SupportedCipherSuite,
     }
 }
 
+#[cfg(feature = "tls13")]
 pub fn new_tls13_read(scs: &'static SupportedCipherSuite,
                       secret: &[u8]) -> Box<MessageDecrypter> {
     let hash = scs.get_hash();
@@ -120,6 +122,7 @@ pub fn new_tls13_read(scs: &'static SupportedCipherSuite,
     Box::new(TLS13MessageDecrypter::new(aead_alg, &key, &iv))
 }
 
+#[cfg(feature = "tls13")]
 pub fn new_tls13_write(scs: &'static SupportedCipherSuite,
                        secret: &[u8]) -> Box<MessageEncrypter> {
     let hash = scs.get_hash();
@@ -131,6 +134,7 @@ pub fn new_tls13_write(scs: &'static SupportedCipherSuite,
 }
 
 /// A `MessageEncrypter` for AES-GCM AEAD ciphersuites. TLS 1.2 only.
+#[cfg(feature = "aesgcm")]
 pub struct GCMMessageEncrypter {
     alg: &'static ring::aead::Algorithm,
     enc_key: ring::aead::SealingKey,
@@ -139,14 +143,18 @@ pub struct GCMMessageEncrypter {
 }
 
 /// A `MessageDecrypter` for AES-GCM AEAD ciphersuites.  TLS1.2 only.
+#[cfg(feature = "aesgcm")]
 pub struct GCMMessageDecrypter {
     dec_key: ring::aead::OpeningKey,
     dec_salt: [u8; 4],
 }
 
+#[cfg(feature = "aesgcm")]
 const GCM_EXPLICIT_NONCE_LEN: usize = 8;
+#[cfg(feature = "aesgcm")]
 const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 
+#[cfg(feature = "aesgcm")]
 impl MessageDecrypter for GCMMessageDecrypter {
     fn decrypt(&self, mut msg: Message, seq: u64) -> Result<Message, TLSError> {
         let payload = msg.take_opaque_payload()
@@ -190,6 +198,7 @@ impl MessageDecrypter for GCMMessageDecrypter {
     }
 }
 
+#[cfg(feature = "aesgcm")]
 impl MessageEncrypter for GCMMessageEncrypter {
     fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, TLSError> {
         // The GCM nonce is constructed from a 32-bit 'salt' derived
@@ -231,6 +240,7 @@ impl MessageEncrypter for GCMMessageEncrypter {
     }
 }
 
+#[cfg(feature = "aesgcm")]
 impl GCMMessageEncrypter {
     fn new(alg: &'static ring::aead::Algorithm,
            enc_key: &[u8],
@@ -253,6 +263,7 @@ impl GCMMessageEncrypter {
     }
 }
 
+#[cfg(feature = "aesgcm")]
 impl GCMMessageDecrypter {
     fn new(alg: &'static ring::aead::Algorithm,
            dec_key: &[u8],
@@ -268,18 +279,21 @@ impl GCMMessageDecrypter {
     }
 }
 
+#[cfg(feature = "tls13")]
 struct TLS13MessageEncrypter {
     alg: &'static ring::aead::Algorithm,
     enc_key: ring::aead::SealingKey,
     enc_offset: [u8; 12],
 }
 
+#[cfg(feature = "tls13")]
 struct TLS13MessageDecrypter {
     alg: &'static ring::aead::Algorithm,
     dec_key: ring::aead::OpeningKey,
     dec_offset: [u8; 12],
 }
 
+#[cfg(feature = "tls13")]
 fn unpad_tls13(v: &mut Vec<u8>) -> ContentType {
     loop {
         match v.pop() {
@@ -292,6 +306,7 @@ fn unpad_tls13(v: &mut Vec<u8>) -> ContentType {
     }
 }
 
+#[cfg(feature = "tls13")]
 const TLS13_AAD_SIZE: usize = 1 + 2 + 2;
 fn make_tls13_aad(len: usize, out: &mut [u8]) {
     out[0] = 0x17; // ContentType::ApplicationData
@@ -301,6 +316,7 @@ fn make_tls13_aad(len: usize, out: &mut [u8]) {
     out[4] = len as u8;
 }
 
+#[cfg(feature = "tls13")]
 impl MessageEncrypter for TLS13MessageEncrypter {
     fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, TLSError> {
         let nonce = {
@@ -332,6 +348,7 @@ impl MessageEncrypter for TLS13MessageEncrypter {
     }
 }
 
+#[cfg(feature = "tls13")]
 impl MessageDecrypter for TLS13MessageDecrypter {
     fn decrypt(&self, mut msg: Message, seq: u64) -> Result<Message, TLSError> {
         let nonce = {
@@ -380,6 +397,7 @@ impl MessageDecrypter for TLS13MessageDecrypter {
     }
 }
 
+#[cfg(feature = "tls13")]
 impl TLS13MessageEncrypter {
     fn new(alg: &'static ring::aead::Algorithm,
            enc_key: &[u8],
@@ -395,6 +413,7 @@ impl TLS13MessageEncrypter {
     }
 }
 
+#[cfg(feature = "tls13")]
 impl TLS13MessageDecrypter {
     fn new(alg: &'static ring::aead::Algorithm,
            dec_key: &[u8],
@@ -413,6 +432,7 @@ impl TLS13MessageDecrypter {
 /// The RFC7905/RFC7539 ChaCha20Poly1305 construction.
 /// This implementation does the AAD construction required in TLS1.2.
 /// TLS1.3 uses `TLS13MessageEncrypter`.
+#[cfg(feature = "chachapoly")]
 pub struct ChaCha20Poly1305MessageEncrypter {
     alg: &'static ring::aead::Algorithm,
     enc_key: ring::aead::SealingKey,
@@ -422,11 +442,13 @@ pub struct ChaCha20Poly1305MessageEncrypter {
 /// The RFC7905/RFC7539 ChaCha20Poly1305 construction.
 /// This implementation does the AAD construction required in TLS1.2.
 /// TLS1.3 uses `TLS13MessageDecrypter`.
+#[cfg(feature = "chachapoly")]
 pub struct ChaCha20Poly1305MessageDecrypter {
     dec_key: ring::aead::OpeningKey,
     dec_offset: [u8; 12],
 }
 
+#[cfg(feature = "chachapoly")]
 impl ChaCha20Poly1305MessageEncrypter {
     fn new(alg: &'static ring::aead::Algorithm,
            enc_key: &[u8],
@@ -442,6 +464,7 @@ impl ChaCha20Poly1305MessageEncrypter {
     }
 }
 
+#[cfg(feature = "chachapoly")]
 impl ChaCha20Poly1305MessageDecrypter {
     fn new(alg: &'static ring::aead::Algorithm,
            dec_key: &[u8],
@@ -456,8 +479,10 @@ impl ChaCha20Poly1305MessageDecrypter {
     }
 }
 
+#[cfg(feature = "chachapoly")]
 const CHACHAPOLY1305_OVERHEAD: usize = 16;
 
+#[cfg(feature = "chachapoly")]
 impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
     fn decrypt(&self, mut msg: Message, seq: u64) -> Result<Message, TLSError> {
         let payload = msg.take_opaque_payload()
@@ -498,6 +523,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
     }
 }
 
+#[cfg(feature = "chachapoly")]
 impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
     fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, TLSError> {
         let nonce = {

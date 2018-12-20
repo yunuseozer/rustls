@@ -138,7 +138,7 @@ pub struct ServerConfig {
     pub versions: Vec<ProtocolVersion>,
 
     /// How to verify client certificates.
-    verifier: Arc<verify::ClientCertVerifier>,
+    pub verifier: Arc<verify::ClientCertVerifier>,
 
     /// How to output key material for debugging.  The default
     /// does nothing.

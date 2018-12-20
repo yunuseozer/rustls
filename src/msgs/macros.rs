@@ -4,7 +4,8 @@ macro_rules! enum_builder {
         EnumName: $enum_name: ident;
         EnumVal { $( $enum_var: ident => $enum_val: expr ),* }
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+        #[derive(PartialEq, Eq, Clone, Copy)]
+        #[cfg_attr(feature = "logging", derive(Debug))]
         pub enum $enum_name {
             $( $enum_var),*
             ,Unknown(u8)
@@ -36,7 +37,8 @@ macro_rules! enum_builder {
         EnumName: $enum_name: ident;
         EnumVal { $( $enum_var: ident => $enum_val: expr ),* }
     ) => {
-        #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+        #[derive(PartialEq, Eq, Clone, Copy)]
+        #[cfg_attr(feature = "logging", derive(Debug))]
         pub enum $enum_name {
             $( $enum_var),*
             ,Unknown(u16)
