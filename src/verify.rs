@@ -441,6 +441,7 @@ pub mod sgx_verifier {
     use chrono::{DateTime, Duration};
     use webpki::Error;
     use sgx_types::{sgx_quote_t, sgx_measurement_t, sgx_report_body_t, sgx_report_data_t};
+    use sgx_types::SGX_REPORT_DATA_SIZE;
 
     /// A builder structure used for creating an SgxVerifier
     pub struct SgxVerifierBuilder {
@@ -570,8 +571,7 @@ pub mod sgx_verifier {
                 let mr_signer_offset = offset_of!(sgx_quote_t, report_body)
                                      + offset_of!(sgx_report_body_t, mr_signer)
                                      + offset_of!(sgx_measurement_t, m);
-                let mr_signer_length = std::mem::size_of::<sgx_measurement_t>();
-                if self.mr_signer != quote_bytes[mr_signer_offset..mr_signer_offset + mr_signer_length] {
+                if self.mr_signer != quote_bytes[mr_signer_offset..mr_signer_offset + SGX_REPORT_DATA_SIZE] {
                     return Err(Error::CertNotValidForName);
                 }
 
@@ -579,14 +579,13 @@ pub mod sgx_verifier {
                 let pub_key_offset = offset_of!(sgx_quote_t, report_body)
                                    + offset_of!(sgx_report_body_t, report_data)
                                    + offset_of!(sgx_report_data_t, d);
-                let pub_key_length = std::mem::size_of::<sgx_report_data_t>();
                 let cert_pub_key = cert.spki.read_all(Error::BadDER, |input| {
                     let _ = ring::der::expect_tag_and_get_value(input, ring::der::Tag::Sequence).map_err(|_| Error::BadDER)?;
                     let pub_key_input = ring::der::bit_string_with_no_unused_bits(input).map_err(|_| Error::BadDER)?;
                     Ok(pub_key_input)
                 }).map_err(|_| Error::BadDER)?;
                 let cert_pub_key_bytes = &cert_pub_key.as_slice_less_safe()[1..]; // skip the 0x04 tag byte
-                if *cert_pub_key_bytes != quote_bytes[pub_key_offset..pub_key_offset + pub_key_length] {
+                if *cert_pub_key_bytes != quote_bytes[pub_key_offset..pub_key_offset + SGX_REPORT_DATA_SIZE] {
                     return Err(Error::InvalidCertValidity);
                 }
 
