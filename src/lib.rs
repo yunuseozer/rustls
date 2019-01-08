@@ -201,6 +201,23 @@
 //   underneath.
 #![cfg_attr(feature = "cargo-clippy", allow(ptr_arg))]
 
+// Our dependencies:
+
+#[cfg(feature = "sgx")]
+use serde_json;
+
+#[cfg(feature = "sgx")]
+use chrono;
+
+#[cfg(feature = "sgx")]
+// sgx_types for parsing SGX attestation reports
+use sgx_types;
+
+// memoffset for calculating the offset inside sgx types
+#[cfg(feature = "sgx")]
+#[macro_use]
+use memoffset;
+
 // log for logging (optional).
 #[cfg(feature = "logging")]
 use log;
@@ -303,4 +320,7 @@ pub use crate::verify::{ServerCertVerifier, ServerCertVerified,
     ClientCertVerifier, ClientCertVerified};
 #[cfg(feature = "dangerous_configuration")]
 pub use crate::client::danger::DangerousClientConfig;
+
+#[cfg(feature = "sgx")]
+pub use verify::sgx_verifier::SgxVerifierBuilder;
 

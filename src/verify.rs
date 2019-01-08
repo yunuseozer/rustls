@@ -432,3 +432,168 @@ pub fn verify_scts(cert: &Certificate,
 
     Ok(())
 }
+
+#[cfg(feature = "sgx")]
+pub mod sgx_verifier {
+    use ::*;
+    use verify::{ServerCertVerifier, ServerCertVerified, try_now, SUPPORTED_SIG_ALGS};
+    use serde_json::{self, Value};
+    use chrono::{DateTime, Duration};
+    use webpki::Error;
+    use sgx_types::{sgx_quote_t, sgx_measurement_t, sgx_report_body_t, sgx_report_data_t};
+
+    /// A builder structure used for creating an SgxVerifier
+    pub struct SgxVerifierBuilder {
+        mr_signer: [u8; 32],
+        allow_group_out_of_date: bool,
+        allow_configuration_needed: bool,
+        report_freshness_secs: i64,
+    }
+
+    impl SgxVerifierBuilder {
+
+        /// Create a builder used for creating an SgxVerifier.
+        ///
+        /// # Examples
+        /// ```
+        /// let sgx_verifier = rustls::SgxVerifierBuilder::new(mr_signer_bytes)
+        ///     .allow_configuration_needed()
+        ///     .allow_group_out_of_date()
+        ///     .finalize();
+        /// let mut config = rustls::ClientConfig::new();
+        /// config.dangerous().set_certificate_verifer(Arc::new(sgx_verifier));
+        /// ```
+        pub fn new(mr_signer: [u8; 32]) -> Self {
+            SgxVerifierBuilder {
+                mr_signer: mr_signer,
+                allow_group_out_of_date: false,
+                allow_configuration_needed: false,
+                report_freshness_secs: 24*60*60, // 24 hrs
+            }
+        }
+
+        /// Set the flag that it is OK to accept GROUP_OUT_OF_DATE
+        pub fn allow_group_out_of_date(mut self) -> Self {
+            self.allow_group_out_of_date = true;
+            self
+        }
+
+        /// Set the flag that it is OK to accept CONFIGURATION_NEEDED
+        pub fn allow_configuration_needed(mut self) -> Self {
+            self.allow_configuration_needed = true;
+            self
+        }
+
+        /// Set the seconds during which the attestation is accepted
+        pub fn report_freshness_secs(mut self, secs: i64) -> Self {
+            self.report_freshness_secs = secs;
+            self
+        }
+
+        /// Create an SgxVerifier using the previously provided configuration
+        pub fn finalize(self) -> SgxVerifier {
+            SgxVerifier {
+                time: try_now,
+                mr_signer: self.mr_signer,
+                allow_group_out_of_date: self.allow_group_out_of_date,
+                allow_configuration_needed: self.allow_configuration_needed,
+                report_freshness_secs: self.report_freshness_secs,
+            }
+        }
+    }
+
+    pub struct SgxVerifier {
+        pub time: fn() -> Result<webpki::Time, TLSError>,
+        mr_signer: [u8; 32],
+        allow_group_out_of_date: bool,
+        allow_configuration_needed: bool,
+        report_freshness_secs: i64,
+    }
+
+    impl ServerCertVerifier for SgxVerifier {
+        fn verify_server_cert(&self,
+                              _roots: &RootCertStore,
+                              presented_certs: &[Certificate],
+                              _dns_name: webpki::DNSNameRef,
+                              _ocsp_response: &[u8]) -> Result<ServerCertVerified, TLSError> {
+            let cert_der = untrusted::Input::from(&presented_certs[0].0);
+            let cert = webpki::EndEntityCert::from(cert_der).map_err(TLSError::WebPKIError)?;
+            let now = (self.time)()?;
+            cert.verify_is_valid_sgx_attestation_report(SUPPORTED_SIG_ALGS, now, |cert, input| {
+                let report_bytes = input.as_slice_less_safe();
+                let report: Value = serde_json::from_slice(report_bytes)
+                                    .map_err(|_| Error::ExtensionValueInvalid)?;
+
+                // 1. Extract timestamp, quote_status, and quote_body from the attestation report
+                let (timestamp, quote_status, quote_body) = match (
+                    &report["timestamp"],
+                    &report["isvEnclaveQuoteStatus"],
+                    &report["isvEnclaveQuoteBody"],
+                ) {
+                    (Value::String(time), Value::String(quote_status), Value::String(quote_body))
+                        => {
+                        (time, quote_status, quote_body)
+                    }
+                    _ => return Err(Error::ExtensionValueInvalid),
+                };
+
+                // 2. Verify if the timestamp is fresh
+                let timestamp = timestamp.clone() + "+0000";
+                let not_before = DateTime::parse_from_str(&timestamp, "%Y-%m-%dT%H:%M:%S%.f%z")
+                    .map_err(|_| Error::BadDER)?;
+                let not_after = not_before
+                    .clone()
+                    .checked_add_signed(Duration::seconds(self.report_freshness_secs))
+                    .ok_or(Error::BadDER)?;
+
+                let not_before = webpki::Time::from_seconds_since_unix_epoch(not_before.timestamp() as u64);
+                let not_after = webpki::Time::from_seconds_since_unix_epoch(not_after.timestamp() as u64);
+                if now < not_before {
+                    return Err(Error::CertNotValidYet);
+                }
+                if now > not_after {
+                    return Err(Error::CertExpired);
+                }
+
+                // 3. Verify the quote status
+                match quote_status.as_ref() {
+                    "OK" => (),
+                    "GROUP_OUT_OF_DATE" if self.allow_group_out_of_date => (),
+                    "CONFIGURATION_NEEDED" if self.allow_configuration_needed => (),
+                    _ => return Err(Error::CertNotValidForName),
+                }
+
+                // 4. Continue to decode the quote body
+                let quote_bytes = base64::decode(&quote_body).map_err(|_| Error::BadDER)?;
+
+                // 5. Check if MR_SIGNER matches
+                let mr_signer_offset = offset_of!(sgx_quote_t, report_body)
+                                     + offset_of!(sgx_report_body_t, mr_signer)
+                                     + offset_of!(sgx_measurement_t, m);
+                let mr_signer_length = std::mem::size_of::<sgx_measurement_t>();
+                if self.mr_signer != quote_bytes[mr_signer_offset..mr_signer_offset + mr_signer_length] {
+                    return Err(Error::CertNotValidForName);
+                }
+
+                // 6.  Check if the public key matches
+                let pub_key_offset = offset_of!(sgx_quote_t, report_body)
+                                   + offset_of!(sgx_report_body_t, report_data)
+                                   + offset_of!(sgx_report_data_t, d);
+                let pub_key_length = std::mem::size_of::<sgx_report_data_t>();
+                let cert_pub_key = cert.spki.read_all(Error::BadDER, |input| {
+                    let _ = ring::der::expect_tag_and_get_value(input, ring::der::Tag::Sequence).map_err(|_| Error::BadDER)?;
+                    let pub_key_input = ring::der::bit_string_with_no_unused_bits(input).map_err(|_| Error::BadDER)?;
+                    Ok(pub_key_input)
+                }).map_err(|_| Error::BadDER)?;
+                let cert_pub_key_bytes = &cert_pub_key.as_slice_less_safe()[1..]; // skip the 0x04 tag byte
+                if *cert_pub_key_bytes != quote_bytes[pub_key_offset..pub_key_offset + pub_key_length] {
+                    return Err(Error::InvalidCertValidity);
+                }
+
+                Ok(())
+            })
+                .map_err(TLSError::WebPKIError)
+                .map(|_| ServerCertVerified::assertion())
+        }
+    }
+}
