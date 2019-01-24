@@ -201,23 +201,6 @@
 //   underneath.
 #![cfg_attr(feature = "cargo-clippy", allow(ptr_arg))]
 
-// Our dependencies:
-
-#[cfg(feature = "sgx")]
-use serde_json;
-
-#[cfg(feature = "sgx")]
-use chrono;
-
-#[cfg(feature = "sgx")]
-// sgx_types for parsing SGX attestation reports
-use sgx_types;
-
-// memoffset for calculating the offset inside sgx types
-#[cfg(feature = "sgx")]
-#[macro_use]
-use memoffset;
-
 // log for logging (optional).
 #[cfg(feature = "logging")]
 use log;

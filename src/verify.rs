@@ -435,13 +435,18 @@ pub fn verify_scts(cert: &Certificate,
 
 #[cfg(feature = "sgx")]
 pub mod sgx_verifier {
-    use ::*;
-    use verify::{ServerCertVerifier, ServerCertVerified, try_now, SUPPORTED_SIG_ALGS};
+    use super::*;
+    use crate::verify::{ServerCertVerifier, ServerCertVerified, try_now, SUPPORTED_SIG_ALGS};
+    use crate::TLSError;
     use serde_json::{self, Value};
     use chrono::{DateTime, Duration};
     use webpki::Error;
+    use ring::io::der;
     use sgx_types::{sgx_quote_t, sgx_measurement_t, sgx_report_body_t, sgx_report_data_t};
     use sgx_types::SGX_REPORT_DATA_SIZE;
+
+    #[cfg(feature = "sgx")]
+    use memoffset::offset_of;
 
     /// A builder structure used for creating an SgxVerifier
     pub struct SgxVerifierBuilder {
@@ -580,8 +585,8 @@ pub mod sgx_verifier {
                                    + offset_of!(sgx_report_body_t, report_data)
                                    + offset_of!(sgx_report_data_t, d);
                 let cert_pub_key = cert.spki.read_all(Error::BadDER, |input| {
-                    let _ = ring::der::expect_tag_and_get_value(input, ring::der::Tag::Sequence).map_err(|_| Error::BadDER)?;
-                    let pub_key_input = ring::der::bit_string_with_no_unused_bits(input).map_err(|_| Error::BadDER)?;
+                    let _ = der::expect_tag_and_get_value(input, der::Tag::Sequence).map_err(|_| Error::BadDER)?;
+                    let pub_key_input = der::bit_string_with_no_unused_bits(input).map_err(|_| Error::BadDER)?;
                     Ok(pub_key_input)
                 }).map_err(|_| Error::BadDER)?;
                 let cert_pub_key_bytes = &cert_pub_key.as_slice_less_safe()[1..]; // skip the 0x04 tag byte
