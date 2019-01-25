@@ -443,7 +443,7 @@ pub mod sgx_verifier {
     use webpki::Error;
     use ring::io::der;
     use sgx_types::{sgx_quote_t, sgx_measurement_t, sgx_report_body_t, sgx_report_data_t, sgx_attributes_t};
-    use sgx_types::{SGX_FLAGS_DEBUG, SGX_REPORT_DATA_SIZE};
+    use sgx_types::{SGX_FLAGS_DEBUG, SGX_HASH_SIZE, SGX_REPORT_DATA_SIZE};
 
     #[cfg(feature = "sgx")]
     use memoffset::offset_of;
@@ -570,7 +570,7 @@ pub mod sgx_verifier {
                     "OK" => (),
                     "GROUP_OUT_OF_DATE" if self.allow_group_out_of_date => (),
                     "CONFIGURATION_NEEDED" if self.allow_configuration_needed => (),
-                    _ => return Err(Error::CertNotValidForName),
+                    _ => return Err(Error::NameConstraintViolation),
                 }
 
                 // 4. Continue to decode the quote body
@@ -580,7 +580,7 @@ pub mod sgx_verifier {
                 let mr_signer_offset = offset_of!(sgx_quote_t, report_body)
                                      + offset_of!(sgx_report_body_t, mr_signer)
                                      + offset_of!(sgx_measurement_t, m);
-                if self.mr_signer != quote_bytes[mr_signer_offset..mr_signer_offset + SGX_REPORT_DATA_SIZE] {
+                if self.mr_signer != quote_bytes[mr_signer_offset..mr_signer_offset + SGX_HASH_SIZE] {
                     return Err(Error::CertNotValidForName);
                 }
 
