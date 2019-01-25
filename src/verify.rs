@@ -442,8 +442,8 @@ pub mod sgx_verifier {
     use chrono::{DateTime, Duration};
     use webpki::Error;
     use ring::io::der;
-    use sgx_types::{sgx_quote_t, sgx_measurement_t, sgx_report_body_t, sgx_report_data_t};
-    use sgx_types::SGX_REPORT_DATA_SIZE;
+    use sgx_types::{sgx_quote_t, sgx_measurement_t, sgx_report_body_t, sgx_report_data_t, sgx_attributes_t};
+    use sgx_types::{SGX_FLAGS_DEBUG, SGX_REPORT_DATA_SIZE};
 
     #[cfg(feature = "sgx")]
     use memoffset::offset_of;
@@ -451,6 +451,7 @@ pub mod sgx_verifier {
     /// A builder structure used for creating an SgxVerifier
     pub struct SgxVerifierBuilder {
         mr_signer: [u8; 32],
+        use_debug_launch: bool,
         allow_group_out_of_date: bool,
         allow_configuration_needed: bool,
         report_freshness_secs: i64,
@@ -469,9 +470,10 @@ pub mod sgx_verifier {
         /// let mut config = rustls::ClientConfig::new();
         /// config.dangerous().set_certificate_verifer(Arc::new(sgx_verifier));
         /// ```
-        pub fn new(mr_signer: [u8; 32]) -> Self {
+        pub fn new(mr_signer: [u8; 32], debug_launch: bool) -> Self {
             SgxVerifierBuilder {
                 mr_signer: mr_signer,
+                use_debug_launch: debug_launch,
                 allow_group_out_of_date: false,
                 allow_configuration_needed: false,
                 report_freshness_secs: 24*60*60, // 24 hrs
@@ -501,6 +503,7 @@ pub mod sgx_verifier {
             SgxVerifier {
                 time: try_now,
                 mr_signer: self.mr_signer,
+                use_debug_launch: self.use_debug_launch,
                 allow_group_out_of_date: self.allow_group_out_of_date,
                 allow_configuration_needed: self.allow_configuration_needed,
                 report_freshness_secs: self.report_freshness_secs,
@@ -511,6 +514,7 @@ pub mod sgx_verifier {
     pub struct SgxVerifier {
         pub time: fn() -> Result<webpki::Time, TLSError>,
         mr_signer: [u8; 32],
+        use_debug_launch: bool,
         allow_group_out_of_date: bool,
         allow_configuration_needed: bool,
         report_freshness_secs: i64,
@@ -580,7 +584,18 @@ pub mod sgx_verifier {
                     return Err(Error::CertNotValidForName);
                 }
 
-                // 6.  Check if the public key matches
+                // 6. Check the DEBUG_LAUNCH flag
+                let sgx_flag_offset = offset_of!(sgx_quote_t, report_body)
+                                    + offset_of!(sgx_report_body_t, attributes)
+                                    + offset_of!(sgx_attributes_t, flags);
+                let mut flag_u8_array = [0u8; 8];
+                flag_u8_array.copy_from_slice(&quote_bytes[sgx_flag_offset..sgx_flag_offset + 8]);
+                let is_debug_launch = SGX_FLAGS_DEBUG & u64::from_le_bytes(flag_u8_array) != 0;
+                if self.use_debug_launch != is_debug_launch {
+                    return Err(Error::ExtensionValueInvalid);
+                }
+
+                // 7.  Check if the public key matches
                 let pub_key_offset = offset_of!(sgx_quote_t, report_body)
                                    + offset_of!(sgx_report_body_t, report_data)
                                    + offset_of!(sgx_report_data_t, d);
