@@ -24,13 +24,13 @@ memoffset = "0.2.1"
 
 [dependencies.webpki]
 git = "https://github.com/mesalock-linux/webpki"
-tag = "v0.8.0"
+tag = "v1.0.0"
 default-features = false
 features = ["std", "trust_anchor_util"]
 
 [dependencies.sct]
 git = "https://github.com/mesalock-linux/sct.rs"
-tag = "v0.8.0"
+tag = "v1.0.0"
 default-features = false
 
 [features]
