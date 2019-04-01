@@ -590,7 +590,10 @@ pub mod sgx_verifier {
                                     + offset_of!(sgx_attributes_t, flags);
                 let mut flag_u8_array = [0u8; 8];
                 flag_u8_array.copy_from_slice(&quote_bytes[sgx_flag_offset..sgx_flag_offset + 8]);
-                let is_debug_launch = SGX_FLAGS_DEBUG & u64::from_le_bytes(flag_u8_array) != 0;
+
+                // In current design, the SGX_FLAGS_DEBUG = 0x2 as u64. So we can use the LAST BYTE ONLY
+                // flag_u8_array is a little-endian number
+                let is_debug_launch = ((SGX_FLAGS_DEBUG & 0xFF) as u8) & flag_u8_array[0] != 0;
                 if self.use_debug_launch != is_debug_launch {
                     return Err(Error::ExtensionValueInvalid);
                 }

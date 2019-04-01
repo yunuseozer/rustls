@@ -305,5 +305,5 @@ pub use crate::verify::{ServerCertVerifier, ServerCertVerified,
 pub use crate::client::danger::DangerousClientConfig;
 
 #[cfg(feature = "sgx")]
-pub use verify::sgx_verifier::SgxVerifierBuilder;
+pub use crate::verify::sgx_verifier::SgxVerifierBuilder;
 
