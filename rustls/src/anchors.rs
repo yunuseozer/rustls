@@ -1,10 +1,17 @@
+use std::prelude::v1::*;
+use webpki;
+
 use crate::key;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
-use crate::msgs::handshake::{DistinguishedName, DistinguishedNames};
+pub use crate::msgs::handshake::{DistinguishedName, DistinguishedNames};
+use crate::pemfile;
 use crate::x509;
+use std::io;
 
-/// A trust anchor, commonly known as a "Root Certificate."
+/// This is like a `webpki::TrustAnchor`, except it owns
+/// rather than borrows its memory.  That prevents lifetimes
+/// leaking up the object tree.
 #[derive(Debug, Clone)]
 pub struct OwnedTrustAnchor {
     subject: Vec<u8>,
@@ -13,51 +20,37 @@ pub struct OwnedTrustAnchor {
 }
 
 impl OwnedTrustAnchor {
+    /// Copy a `webpki::TrustAnchor` into owned memory
+    pub fn from_trust_anchor(t: &webpki::TrustAnchor) -> OwnedTrustAnchor {
+        OwnedTrustAnchor {
+            subject: t.subject.to_vec(),
+            spki: t.spki.to_vec(),
+            name_constraints: t.name_constraints.map(|x| x.to_vec()),
+        }
+    }
+
     /// Get a `webpki::TrustAnchor` by borrowing the owned elements.
-    pub(crate) fn to_trust_anchor(&self) -> webpki::TrustAnchor {
+    pub fn to_trust_anchor(&self) -> webpki::TrustAnchor {
         webpki::TrustAnchor {
             subject: &self.subject,
             spki: &self.spki,
-            name_constraints: self.name_constraints.as_deref(),
+            name_constraints: self
+                .name_constraints
+                .as_ref()
+                .map(Vec::as_slice),
         }
     }
+}
 
-    /// Constructs an `OwnedTrustAnchor` from its components.
-    ///
-    /// All inputs are DER-encoded.
-    ///
-    /// `subject` is the [Subject] field of the trust anchor.
-    ///
-    /// `spki` is the [SubjectPublicKeyInfo] field of the trust anchor.
-    ///
-    /// `name_constraints` is the [Name Constraints] to
-    /// apply for this trust anchor, if any.
-    ///
-    /// [Subject]: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.6
-    /// [SubjectPublicKeyInfo]: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.7
-    /// [Name Constraints]: https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.10
-    pub fn from_subject_spki_name_constraints(
-        subject: impl Into<Vec<u8>>,
-        spki: impl Into<Vec<u8>>,
-        name_constraints: Option<impl Into<Vec<u8>>>,
-    ) -> Self {
-        Self {
-            subject: subject.into(),
-            spki: spki.into(),
-            name_constraints: name_constraints.map(|x| x.into()),
-        }
+impl From<webpki::TrustAnchor<'_>> for OwnedTrustAnchor {
+    fn from(t: webpki::TrustAnchor) -> OwnedTrustAnchor {
+        Self::from_trust_anchor(&t)
     }
+}
 
-    /// Return the subject field.
-    ///
-    /// This can be decoded using [x509-parser's FromDer trait](https://docs.rs/x509-parser/latest/x509_parser/traits/trait.FromDer.html).
-    ///
-    /// ```ignore
-    /// use x509_parser::traits::FromDer;
-    /// println!("{}", x509_parser::x509::X509Name::from_der(anchor.subject())?.1);
-    /// ```
-    pub fn subject(&self) -> &[u8] {
-        &self.subject
+impl<'a> Into<webpki::TrustAnchor<'a>> for &'a OwnedTrustAnchor {
+    fn into(self) -> webpki::TrustAnchor<'a> {
+        self.to_trust_anchor()
     }
 }
 
@@ -71,8 +64,8 @@ pub struct RootCertStore {
 
 impl RootCertStore {
     /// Make a new, empty `RootCertStore`.
-    pub fn empty() -> Self {
-        Self { roots: Vec::new() }
+    pub fn empty() -> RootCertStore {
+        RootCertStore { roots: Vec::new() }
     }
 
     /// Return true if there are no certificates.
@@ -86,8 +79,7 @@ impl RootCertStore {
     }
 
     /// Return the Subject Names for certificates in the container.
-    #[deprecated(since = "0.20.7", note = "Use OwnedTrustAnchor::subject() instead")]
-    pub fn subjects(&self) -> DistinguishedNames {
+    pub fn get_subjects(&self) -> DistinguishedNames {
         let mut r = DistinguishedNames::new();
 
         for ota in &self.roots {
@@ -102,12 +94,9 @@ impl RootCertStore {
 
     /// Add a single DER-encoded certificate to the store.
     pub fn add(&mut self, der: &key::Certificate) -> Result<(), webpki::Error> {
-        let ta = webpki::TrustAnchor::try_from_cert_der(&der.0)?;
-        let ota = OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        );
+        let ta = webpki::trust_anchor_util::cert_der_as_trust_anchor(&der.0)?;
+
+        let ota = OwnedTrustAnchor::from_trust_anchor(&ta);
         self.roots.push(ota);
         Ok(())
     }
@@ -116,28 +105,35 @@ impl RootCertStore {
     /// fail.
     pub fn add_server_trust_anchors(
         &mut self,
-        trust_anchors: impl Iterator<Item = OwnedTrustAnchor>,
+        &webpki::TLSServerTrustAnchors(anchors): &webpki::TLSServerTrustAnchors,
     ) {
-        self.roots.extend(trust_anchors)
+        for ta in anchors {
+            self.roots
+                .push(OwnedTrustAnchor::from_trust_anchor(ta));
+        }
     }
 
-    /// Parse the given DER-encoded certificates and add all that can be parsed
-    /// in a best-effort fashion.
+    /// Parse a PEM file and add all certificates found inside.
+    /// Errors are non-specific; they may be io errors in `rd` and
+    /// PEM format errors, but not certificate validity errors.
     ///
     /// This is because large collections of root certificates often
-    /// include ancient or syntactically invalid certificates.
+    /// include ancient or syntactically invalid certificates.  CAs
+    /// are competent like that.
     ///
-    /// Returns the number of certificates added, and the number that were ignored.
-    pub fn add_parsable_certificates(&mut self, der_certs: &[Vec<u8>]) -> (usize, usize) {
+    /// Returns the number of certificates added, and the number
+    /// which were extracted from the PEM but ultimately unsuitable.
+    pub fn add_pem_file(&mut self, rd: &mut dyn io::BufRead) -> Result<(usize, usize), ()> {
+        let ders = pemfile::certs(rd)?;
         let mut valid_count = 0;
         let mut invalid_count = 0;
 
-        for der_cert in der_certs {
+        for der in ders {
             #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
-            match self.add(&key::Certificate(der_cert.clone())) {
+            match self.add(&der) {
                 Ok(_) => valid_count += 1,
                 Err(err) => {
-                    trace!("invalid cert der {:?}", der_cert);
+                    trace!("invalid cert der {:?}", der);
                     debug!("certificate parsing failed: {:?}", err);
                     invalid_count += 1
                 }
@@ -145,10 +141,10 @@ impl RootCertStore {
         }
 
         debug!(
-            "add_parsable_certificates processed {} valid and {} invalid certs",
+            "add_pem_file processed {} valid and {} invalid certs",
             valid_count, invalid_count
         );
 
-        (valid_count, invalid_count)
+        Ok((valid_count, invalid_count))
     }
 }

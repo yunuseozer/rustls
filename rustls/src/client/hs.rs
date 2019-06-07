@@ -8,6 +8,7 @@ use crate::hash_hs::HandshakeHashBuffer;
 use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
+use std::prelude::v1::*;
 use crate::msgs::base::Payload;
 #[cfg(feature = "quic")]
 use crate::msgs::base::PayloadU16;

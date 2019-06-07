@@ -1,41 +1,58 @@
-use crate::{key, sign};
+use crate::hash_hs;
+use crate::key;
+use std::prelude::v1::*;
+use crate::msgs::handshake::{ServerExtension, SessionID};
+use crate::session::SessionRandoms;
+use crate::suites;
 
-/// ActiveCertifiedKey wraps CertifiedKey and tracks OSCP and SCT state
-/// in a single handshake.
-pub(super) struct ActiveCertifiedKey<'a> {
-    key: &'a sign::CertifiedKey,
-    ocsp: Option<&'a [u8]>,
-    sct_list: Option<&'a [u8]>,
+use std::mem;
+
+pub struct HandshakeDetails {
+    pub transcript: hash_hs::HandshakeHash,
+    pub hash_at_server_fin: Vec<u8>,
+    pub session_id: SessionID,
+    pub randoms: SessionRandoms,
+    pub using_ems: bool,
+    pub extra_exts: Vec<ServerExtension>,
 }
 
-impl<'a> ActiveCertifiedKey<'a> {
-    pub(super) fn from_certified_key(key: &sign::CertifiedKey) -> ActiveCertifiedKey {
-        ActiveCertifiedKey {
-            key,
-            ocsp: key.ocsp.as_deref(),
-            sct_list: key.sct_list.as_deref(),
+impl HandshakeDetails {
+    pub fn new(extra_exts: Vec<ServerExtension>) -> HandshakeDetails {
+        HandshakeDetails {
+            transcript: hash_hs::HandshakeHash::new(),
+            hash_at_server_fin: Vec::new(),
+            session_id: SessionID::empty(),
+            randoms: SessionRandoms::for_server(),
+            using_ems: false,
+            extra_exts,
         }
     }
+}
 
-    /// Get the certificate chain
-    #[inline]
-    pub(super) fn get_cert(&self) -> &[key::Certificate] {
-        &self.key.cert
+pub struct ServerKXDetails {
+    pub kx: Option<suites::KeyExchange>,
+}
+
+impl ServerKXDetails {
+    pub fn new(kx: suites::KeyExchange) -> ServerKXDetails {
+        ServerKXDetails { kx: Some(kx) }
     }
 
-    /// Get the signing key
-    #[inline]
-    pub(super) fn get_key(&self) -> &dyn sign::SigningKey {
-        &*self.key.key
+    pub fn take_kx(&mut self) -> suites::KeyExchange {
+        self.kx.take().unwrap()
+    }
+}
+
+pub struct ClientCertDetails {
+    pub cert_chain: Vec<key::Certificate>,
+}
+
+impl ClientCertDetails {
+    pub fn new(chain: Vec<key::Certificate>) -> ClientCertDetails {
+        ClientCertDetails { cert_chain: chain }
     }
 
-    #[inline]
-    pub(super) fn get_ocsp(&self) -> Option<&[u8]> {
-        self.ocsp
-    }
-
-    #[inline]
-    pub(super) fn get_sct_list(&self) -> Option<&[u8]> {
-        self.sct_list
+    pub fn take_chain(&mut self) -> Vec<key::Certificate> {
+        mem::replace(&mut self.cert_chain, Vec::new())
     }
 }

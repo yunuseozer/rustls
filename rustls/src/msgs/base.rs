@@ -1,6 +1,7 @@
 use std::fmt;
 
 use crate::key;
+use std::prelude::v1::*;
 use crate::msgs::codec;
 use crate::msgs::codec::{Codec, Reader};
 
