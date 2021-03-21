@@ -17,9 +17,11 @@ fi
 # Best effort on OS-X
 case $OSTYPE in darwin*) set +e ;; esac
 
+for i in $(seq 1 20) ; do
 ( cd bogo/ssl/test/runner && ./runner.test -shim-path ../../../../../target/debug/examples/bogo_shim \
      -shim-config ../../../../config.json \
      -pipe \
      -allow-unimplemented \
      -test.timeout 60s)
+done
 true
