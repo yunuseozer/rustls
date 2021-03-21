@@ -68,6 +68,7 @@ impl MessageDeframer {
         loop {
             match self.try_deframe_one() {
                 BufferContents::Invalid => {
+                    println!("desynced: buf is {:?}", &self.buf[..self.used]);
                     self.desynced = true;
                     break;
                 }

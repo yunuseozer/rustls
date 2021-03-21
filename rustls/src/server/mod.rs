@@ -449,6 +449,7 @@ impl ServerSessionImpl {
         }
 
         if self.common.message_deframer.desynced {
+            println!("server self.common.message_deframer.desynced");
             return Err(TlsError::CorruptMessage);
         }
 
