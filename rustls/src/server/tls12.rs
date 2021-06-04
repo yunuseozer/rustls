@@ -30,13 +30,13 @@ pub(super) use client_hello::CompleteClientHelloHandling;
 mod client_hello {
     use crate::msgs::enums::ECPointFormat;
     use crate::msgs::enums::{ClientCertificateType, Compression, SignatureScheme};
+    use crate::msgs::handshake::ServerECDHParams;
     use crate::msgs::handshake::{CertificateRequestPayload, Random};
     use crate::msgs::handshake::{
         CertificateStatus, DigitallySignedStruct, ECDHEServerKeyExchange,
     };
     use crate::msgs::handshake::{ClientExtension, SessionID};
     use crate::msgs::handshake::{ClientHelloPayload, ServerHelloPayload};
-    use crate::msgs::handshake::{ECPointFormatList, ServerECDHParams, SupportedPointFormats};
     use crate::msgs::handshake::{ServerExtension, ServerKeyExchangePayload};
     use crate::sign;
 
@@ -74,21 +74,19 @@ mod client_hello {
             let groups_ext = client_hello
                 .get_namedgroups_extension()
                 .ok_or_else(|| hs::incompatible(&mut cx.common, "client didn't describe groups"))?;
-            let ecpoints_ext = client_hello
-                .get_ecpoints_extension()
-                .ok_or_else(|| {
-                    hs::incompatible(&mut cx.common, "client didn't describe ec points")
-                })?;
+            let maybe_ecpoints_ext = client_hello.get_ecpoints_extension();
 
             trace!("namedgroups {:?}", groups_ext);
-            trace!("ecpoints {:?}", ecpoints_ext);
 
-            if !ecpoints_ext.contains(&ECPointFormat::Uncompressed) {
-                cx.common
-                    .send_fatal_alert(AlertDescription::IllegalParameter);
-                return Err(Error::PeerIncompatibleError(
-                    "client didn't support uncompressed ec points".to_string(),
-                ));
+            if let Some(ecpoints_ext) = maybe_ecpoints_ext {
+                trace!("ecpoints {:?}", ecpoints_ext);
+                if !ecpoints_ext.contains(&ECPointFormat::Uncompressed) {
+                    cx.common
+                        .send_fatal_alert(AlertDescription::IllegalParameter);
+                    return Err(Error::PeerIncompatibleError(
+                        "client didn't support uncompressed ec points".to_string(),
+                    ));
+                }
             }
 
             // -- If TLS1.3 is enabled, signal the downgrade in the server random
@@ -164,14 +162,6 @@ mod client_hello {
                 .find(|skxg| groups_ext.contains(&skxg.name))
                 .cloned()
                 .ok_or_else(|| hs::incompatible(&mut cx.common, "no supported group"))?;
-
-            let ecpoint = ECPointFormatList::supported()
-                .iter()
-                .find(|format| ecpoints_ext.contains(format))
-                .cloned()
-                .ok_or_else(|| hs::incompatible(&mut cx.common, "no supported point format"))?;
-
-            debug_assert_eq!(ecpoint, ECPointFormat::Uncompressed);
 
             let (mut ocsp_response, mut sct_list) =
                 (server_key.get_ocsp(), server_key.get_sct_list());
