@@ -309,7 +309,7 @@ impl ServerCertVerifier for WebPkiVerifier {
                 &chain,
                 webpki_now,
             )
-            .map_err(|e| Error::WebPkiError(e, WebPkiOp::ValidateServerCert))
+            .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::ValidateServerCert))
             .map(|_| cert)?;
 
         verify_scts(end_entity, now, scts, self.ct_logs)?;
@@ -319,7 +319,7 @@ impl ServerCertVerifier for WebPkiVerifier {
         }
 
         cert.verify_is_valid_for_dns_name(dns_name.as_ref())
-            .map_err(|e| Error::WebPkiError(e, WebPkiOp::ValidateForDnsName))
+            .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::ValidateForDnsName))
             .map(|_| ServerCertVerified::assertion())
     }
 }
@@ -374,7 +374,7 @@ fn prepare<'a, 'b>(
 ) -> Result<CertChainAndRoots<'a, 'b>, Error> {
     // EE cert must appear first.
     let cert = webpki::EndEntityCert::try_from(end_entity.0.as_ref())
-        .map_err(|e| Error::WebPkiError(e, WebPkiOp::ParseEndEntity))?;
+        .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::ParseEndEntity))?;
 
     let intermediates: Vec<&'a [u8]> = intermediates
         .iter()
@@ -436,7 +436,7 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
             &chain,
             now,
         )
-        .map_err(|e| Error::WebPkiError(e, WebPkiOp::ValidateClientCert))
+        .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::ValidateClientCert))
         .map(|_| ClientCertVerified::assertion())
     }
 }
@@ -587,10 +587,10 @@ fn verify_signed_struct(
 ) -> Result<HandshakeSignatureValid, Error> {
     let possible_algs = convert_scheme(dss.scheme)?;
     let cert = webpki::EndEntityCert::try_from(cert.0.as_ref())
-        .map_err(|e| Error::WebPkiError(e, WebPkiOp::ParseEndEntity))?;
+        .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::ParseEndEntity))?;
 
     verify_sig_using_any_alg(&cert, possible_algs, message, &dss.sig.0)
-        .map_err(|e| Error::WebPkiError(e, WebPkiOp::VerifySignature))
+        .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::VerifySignature))
         .map(|_| HandshakeSignatureValid::assertion())
 }
 
@@ -643,10 +643,10 @@ fn verify_tls13(
 
 
     let cert = webpki::EndEntityCert::try_from(cert.0.as_ref())
-        .map_err(|e| Error::WebPkiError(e, WebPkiOp::ParseEndEntity))?;
+        .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::ParseEndEntity))?;
 
     cert.verify_signature(alg, msg, &dss.sig.0)
-        .map_err(|e| Error::WebPkiError(e, WebPkiOp::VerifySignature))
+        .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::VerifySignature))
         .map(|_| HandshakeSignatureValid::assertion())
 }
 

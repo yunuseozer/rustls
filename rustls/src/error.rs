@@ -5,7 +5,158 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::time::SystemTimeError;
 
-/// The reason WebPKI operation was performed, used in [`Error`].
+/// Reasons for a WebPKI operation to fail, used in [`Error`].
+#[derive(Debug, PartialEq, Clone)]
+#[non_exhaustive]
+pub enum WebPkiError {
+    /// Encountered an illegal encoding.
+    BadEncoding,
+
+    /// Encountered an illegal encoding of a time field.
+    BadTimeEncoding,
+
+    /// A CA certificate was used as an end-entity.
+    CaUsedAsEndEntity,
+
+    /// A certificate was expired, ie the verification time was after
+    /// the notAfter instant.
+    CertExpired,
+
+    /// A certificate was not issued for the given name.
+    CertNotValidForName,
+
+    /// A certificate was not yet valid, ie the verification time was before
+    /// the notBefore instant.
+    CertNotValidYet,
+
+    /// An end-entity certificate was used as a CA
+    EndEntityUsedAsCa,
+
+    /// An X.509 extension had an invalid value
+    ExtensionValueInvalid,
+
+    /// An X.509 certificate had an illegal validity period; for example
+    /// notBefore was after notAfter
+    InvalidCertValidity,
+
+    /// The given signature is invalid.
+    InvalidSignatureForPublicKey,
+
+    /// A certificate violated name constraits required by its issuing path.
+    NameConstraintViolation,
+
+    /// A certificate violated path length constraits required by its issuing path.
+    PathLenConstraintViolation,
+
+    /// A certificate contained inconsistent signature algorithms.
+    SignatureAlgorithmMismatch,
+
+    /// A certificate did not contain the the required extended key usage bits.
+    RequiredEkuNotFound,
+
+    /// It wasn't possible to construct a path from the given end-entity
+    /// certificate to one of the trusted issuers.
+    UnknownIssuer,
+
+    /// An X.509 certificate was encountered that had an illegal version, or
+    /// a version other than 3.
+    UnsupportedCertVersion,
+
+    /// An X.509 extension was encountered that had a missing or malformed extensions.
+    MissingOrMalformedExtension,
+
+    /// An X.509 unrecognized extension was encountered with the critical bit set.
+    UnsupportedCriticalExtension,
+
+    /// The given certified public key cannot verify signatures of this type.
+    UnsupportedSignatureAlgorithmForPublicKey,
+
+    /// The given signature algorithm is not supported.
+    UnsupportedSignatureAlgorithm,
+}
+
+impl From<webpki::Error> for WebPkiError {
+    fn from(e: webpki::Error) -> Self {
+        use webpki::Error;
+        match e {
+            Error::BadDer => Self::BadEncoding,
+            Error::BadDerTime => Self::BadTimeEncoding,
+            Error::CaUsedAsEndEntity => Self::CaUsedAsEndEntity,
+            Error::CertExpired => Self::CertExpired,
+            Error::CertNotValidForName => Self::CertNotValidForName,
+            Error::CertNotValidYet => Self::CertNotValidYet,
+            Error::EndEntityUsedAsCa => Self::EndEntityUsedAsCa,
+            Error::ExtensionValueInvalid => Self::ExtensionValueInvalid,
+            Error::InvalidCertValidity => Self::InvalidCertValidity,
+            Error::InvalidSignatureForPublicKey => Self::InvalidSignatureForPublicKey,
+            Error::NameConstraintViolation => Self::NameConstraintViolation,
+            Error::PathLenConstraintViolated => Self::PathLenConstraintViolation,
+            Error::SignatureAlgorithmMismatch => Self::SignatureAlgorithmMismatch,
+            Error::RequiredEkuNotFound => Self::RequiredEkuNotFound,
+            Error::UnknownIssuer => Self::UnknownIssuer,
+            Error::UnsupportedCertVersion => Self::UnsupportedCertVersion,
+            Error::MissingOrMalformedExtensions => Self::MissingOrMalformedExtension,
+            Error::UnsupportedCriticalExtension => Self::UnsupportedCriticalExtension,
+            Error::UnsupportedSignatureAlgorithmForPublicKey => {
+                Self::UnsupportedSignatureAlgorithmForPublicKey
+            }
+            Error::UnsupportedSignatureAlgorithm => Self::UnsupportedSignatureAlgorithm,
+        }
+    }
+}
+
+impl fmt::Display for WebPkiError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            WebPkiError::BadEncoding => write!(f, "bad DER encoding"),
+            WebPkiError::BadTimeEncoding => write!(f, "bad DER encoding of time"),
+            WebPkiError::CaUsedAsEndEntity => write!(f, "CA certificate used as end-entity"),
+            WebPkiError::CertExpired => write!(f, "certificate expired"),
+            WebPkiError::CertNotValidForName => write!(f, "certificate not valid for name"),
+            WebPkiError::CertNotValidYet => write!(f, "certificate not yet valid"),
+            WebPkiError::EndEntityUsedAsCa => write!(f, "end-entity certificate used as CA"),
+            WebPkiError::ExtensionValueInvalid => write!(f, "invalid X.509 extension value"),
+            WebPkiError::InvalidCertValidity => write!(f, "invalid certificate validity period"),
+            WebPkiError::InvalidSignatureForPublicKey => {
+                write!(f, "invalid signature for certified key")
+            }
+            WebPkiError::NameConstraintViolation => {
+                write!(f, "certificate violates name constraint")
+            }
+            WebPkiError::PathLenConstraintViolation => {
+                write!(f, "certificate violation path length constraint")
+            }
+            WebPkiError::SignatureAlgorithmMismatch => {
+                write!(f, "certificate contains inconsistent signature algorithm")
+            }
+            WebPkiError::RequiredEkuNotFound => {
+                write!(f, "certificate does not have a required extended key usage")
+            }
+            WebPkiError::UnknownIssuer => write!(
+                f,
+                "a valid path from an end-entity to a CA certificate could not be found"
+            ),
+            WebPkiError::UnsupportedCertVersion => {
+                write!(f, "certificate has a version other than v3")
+            }
+            WebPkiError::MissingOrMalformedExtension => {
+                write!(f, "certificate has a missing or malformed X.509 extension")
+            }
+            WebPkiError::UnsupportedCriticalExtension => {
+                write!(f, "certificate has an unrecognized critical extension")
+            }
+            WebPkiError::UnsupportedSignatureAlgorithmForPublicKey => write!(
+                f,
+                "type mismatch between certified key and signature algorithm"
+            ),
+            WebPkiError::UnsupportedSignatureAlgorithm => {
+                write!(f, "unsupported signature algorithm")
+            }
+        }
+    }
+}
+
+/// Which WebPKI operation was performed, used in [`Error`].
 #[derive(Debug, PartialEq, Clone)]
 #[non_exhaustive]
 pub enum WebPkiOp {
@@ -82,7 +233,7 @@ pub enum Error {
     AlertReceived(AlertDescription),
 
     /// The presented certificate chain is invalid.
-    WebPkiError(webpki::Error, WebPkiOp),
+    WebPkiError(WebPkiError, WebPkiOp),
 
     /// The presented SCT(s) were invalid.
     InvalidSct(sct::Error),
@@ -186,10 +337,9 @@ mod tests {
     #[test]
     fn smoke() {
         use super::Error;
-        use super::WebPkiOp;
+        use super::{WebPkiError, WebPkiOp};
         use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType};
         use sct;
-        use webpki;
 
         let all = vec![
             Error::InappropriateMessage {
@@ -207,10 +357,7 @@ mod tests {
             Error::PeerIncompatibleError("no tls1.2".to_string()),
             Error::PeerMisbehavedError("inconsistent something".to_string()),
             Error::AlertReceived(AlertDescription::ExportRestriction),
-            Error::WebPkiError(
-                webpki::Error::ExtensionValueInvalid,
-                WebPkiOp::ParseEndEntity,
-            ),
+            Error::WebPkiError(WebPkiError::ExtensionValueInvalid, WebPkiOp::ParseEndEntity),
             Error::InvalidSct(sct::Error::MalformedSct),
             Error::General("undocumented error".to_string()),
             Error::FailedToGetCurrentTime,
