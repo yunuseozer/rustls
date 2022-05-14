@@ -7,3 +7,6 @@ members = [
 ]
 exclude = ["admin/rustfmt"]
 resolver = "2"
+
+[patch.crates-io]
+webpki = { git = "https://github.com/ctz/webpki", branch = "feat-ip-address" }

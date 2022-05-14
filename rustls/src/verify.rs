@@ -312,7 +312,7 @@ impl ServerCertVerifier for WebPkiVerifier {
         let cert = cert
             .verify_is_valid_tls_server_cert(
                 SUPPORTED_SIG_ALGS,
-                &webpki::TlsServerTrustAnchors(&trustroots),
+                &webpki::TLSServerTrustAnchors(&trustroots),
                 &chain,
                 webpki_now,
             )
@@ -508,7 +508,7 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         let now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
         cert.verify_is_valid_tls_client_cert(
             SUPPORTED_SIG_ALGS,
-            &webpki::TlsClientTrustAnchors(&trustroots),
+            &webpki::TLSClientTrustAnchors(&trustroots),
             &chain,
             now,
         )
@@ -565,7 +565,7 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
 fn pki_error(error: webpki::Error) -> Error {
     use webpki::Error::*;
     match error {
-        BadDer | BadDerTime => Error::InvalidCertificateEncoding,
+        BadDER | BadDERTime => Error::InvalidCertificateEncoding,
         InvalidSignatureForPublicKey => Error::InvalidCertificateSignature,
         UnsupportedSignatureAlgorithm | UnsupportedSignatureAlgorithmForPublicKey => {
             Error::InvalidCertificateSignatureType
