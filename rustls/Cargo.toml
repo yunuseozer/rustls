@@ -16,7 +16,7 @@ base64 = { git = "https://github.com/yunuseozer/rust-base64-sgx" }
 log = { git = "https://github.com/yunuseozer/log-sgx", optional = true }
 ring = { git = "https://github.com/yunuseozer/ring-sgx" }
 sct = { git = "https://github.com/yunuseozer/sct.rs", branch = "mesalock_sgx" }
-webpki = { git = "https://github.com/yunuseozer/webpki", branch = "mesalock_sgx" }
+webpki = { git = "https://github.com/yunuseozer/webpki", rev = "sgx_1.1.4" }
 sgx_tstd = { rev = "v1.1.4-upgrade", git = "https://github.com/yunuseozer/incubator-teaclave-sgx-sdk.git", optional = true }
 
 [features]
